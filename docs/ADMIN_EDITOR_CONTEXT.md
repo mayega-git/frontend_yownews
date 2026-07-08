@@ -596,3 +596,235 @@ propres au forum** (pas de migration vers ratings-core).
 - `app/[locale]/admin/forums/page.tsx` + `ForumAdminWorkspace.tsx`
 - `app/[locale]/reader/forums/page.tsx` + `ForumListPage.tsx`
 - `app/[locale]/reader/forums/[groupId]/page.tsx` + `ForumGroupView.tsx`
+
+---
+
+## 15. Refonte Newsletter : publication + contenu (session #4)
+
+### 15.1 Modèle de données scindé (publication ⇄ contenu)
+La table `newsletter` conflée (identité + contenu en une ligne) a été remplacée par **deux entités** :
+- **`newsletter_entity`** = PUBLICATION / canal (titre, description, `author_id`, `redacteur_id`,
+  `statut` PENDING→APPROVED/REJECTED, `cover_id`). Possédée par un rédacteur approuvé, validée par l'admin.
+- **`newsletter_content_entity`** = CONTENU rattaché par FK (`newsletter_id`), statut
+  DRAFT→SUBMITTED→APPROVED→PUBLISHED (+REJECTED), réutilise l'enum `StatutNewsletter`.
+- `newsletter_categorie` (topics) rattaché à la **publication** ; catégories choisies à la création
+  de la publication, **pas** à la rédaction du contenu.
+
+Workflow : rédacteur approuvé → crée une publication → admin valide → l'espace de rédaction s'ouvre →
+rédige des contenus (TipTap + image) → soumet → admin valide → publie.
+
+**Convention fichiers** : tout replié dans un seul `V80__newsletter_core.sql` (V83/V84 + releases supprimés).
+Converter R2DBC `NewsletterEntityStatusWritingConverter` ajouté (même piège que `RedacteurStatus`).
+
+### 15.2 Correctifs de modération (session #4bis — 6 points)
+1 & 4. **Menu « ⋮ » caché** : `RowMenu` ([components/education/RowMenu.tsx]) rendait son dropdown en
+`position:absolute`, rogné par le `overflow:hidden` des tables. → rendu en **portal** (`position:fixed`).
+2. **Auteur** : colonnes `author_nom`/`author_prenom` sur `newsletter_entity`, remplies **côté BFF** depuis
+`session.user.firstName/lastName` (`api/newsletter/newsletters/route.ts` POST). Colonne « Auteur » en modération.
+3. **Statut/actions persistants** : la modération ne retire plus la ligne ; elle met à jour le badge en place
+et garde un `RowMenu` contextuel (validée → Rejeter/Supprimer ; côté rédacteur → **Modifier** via `PUT /newsletters/{id}`).
+`reject` publication assoupli (possible après APPROVED) + `DELETE /admin/newsletters/{id}` (cascade contenus).
+4. **Contenu** : `RowMenu` avec **Prévisualiser** (modale HTML + cover), Valider, Rejeter, Publier ; statut vivant.
+6. **401 sur validate** — cause : **pas une permission** (l'admin a bien `newsletter:newsletter:manage`, sinon 403).
+C'est `readSession()` qui renvoie `null` quand le **token d'accès KSM expire** (`session.expiresAt` dépassé) →
+le BFF court-circuite en `fail(401)` (cohérent avec 401 + `application-code:10ms` + « GET marchaient avant »).
+Pas de refresh du token user. Fix : `apiFetch` **redirige vers `/auth/login`** sur un 401 d'auth au lieu d'une erreur brute.
+Amélioration future : rotation refresh-token (KSM la supporte via `SessionTokensController`).
+
+### 15.3 Envoi email : tentative Kafka → notification-core, puis RETRAIT (point 5)
+Objectif visé : `publish()` d'un contenu → événement Kafka (outbox kernel) → consumer → envoi email.
+Le producteur reste en place : `NewsletterContentService.publish()` émet un `BusinessEvent`
+`NEWSLETTER_CONTENT_PUBLISHED` (outbox kernel → topic unique `iwm.events.business`, `create-per-aggregate-topic:false`).
+
+**notification-core RETIRÉ** — raison : le module est **délibérément désactivé** dans le monolithe (dépendance
+**commentée** dans `RT-comops-bootstrap/pom.xml` : « Temporarily disabled: missing R2DBC repositories »).
+L'ajouter comme dépendance de newsletter-core l'a réactivé de force → cascade d'échecs : bean `WebClient.Builder`
+manquant (senders Twilio/Firebase/Meta), puis `NotificationReminderScheduler` tapant une table `notification.reminder`
+non provisionnée. Sur décision : **toutes les modifications liées à notification-core ont été retirées** :
+- dépendance `RT-comops-notification-core` supprimée du pom newsletter-core ;
+- `NewsletterContentPublishedConsumer` supprimé (seul fichier newsletter-core qui importait notification-core) ;
+- `WebClientConfiguration` supprimé.
+
+**État actuel** : le producteur émet toujours l'événement mais **aucun consumer ne le traite** (WARN inoffensif
+« No business event consumer registered »). L'**envoi email réel n'est pas branché**. Piste future SANS
+notification-core : une implémentation SMTP de `EmailSender` dans newsletter-core (via `JavaMailSender`,
+`SPRING_MAIL_*` déjà configuré) consommée par un consumer local. Topics préservés (`categorie.kafka_topic` intacte).
+
+### 15.5 Fichiers clés — session #4
+**Backend (`KSM_Kernel_Layer/`)**
+- `db/r2dbc/V80__newsletter_core.sql` — schéma final (publication + contenu + colonnes auteur)
+- newsletter-core : `NewsletterEntity(+R2dbc,+mapper,+DTOs)`, `NewsletterContent`, services `NewsletterEntityService`/
+  `NewsletterContentService` (publish→event, update/delete), controllers (PUT/DELETE), ports/adapters (`deleteByNewsletterId`)
+- `RT-comops-bootstrap/.../config/R2dbcRepositoryConfiguration.java` — `NewsletterEntityStatusWritingConverter`
+- (retirés : `NewsletterContentPublishedConsumer`, dép notification-core, `WebClientConfiguration` — cf. §15.3)
+
+**Frontend (`yownews/src/`)**
+- `components/education/RowMenu.tsx` — dropdown en portal
+- `server/ksm/modules/newsletter.ts` — publications + contenus + covers (`update/deleteNewsletter`, `deleteContent`)
+- `app/api/newsletter/` — `newsletters` (POST/GET), `newsletters/[id]` (GET/PUT/DELETE), `newsletters/[id]/contents`,
+  `contents` (GET), `contents/[id]` (PUT/DELETE), `contents/[id]/{submit,validate,reject,publish,cover}`, `admin/newsletters/[id]/approve`
+- `app/[locale]/editor/newsletter/NewsletterWorkspace.tsx` — flux 2 étapes + RowMenu Modifier
+- `app/[locale]/admin/newsletters/` — `NewsletterPublicationModeration.tsx` (new), `NewsletterContentModeration.tsx`,
+  `moderation/page.tsx` (sous-onglets Newsletters / Contenus)
+- `lib/api-client.ts` — redirection `/auth/login` sur 401 d'authentification
+
+---
+
+## 16. Inscription à deux modes & organisations éditrices (ce lot)
+
+### 16.1 Modèle de données & isolation des contenus
+- **Abonnements & Publications** : Les contenus créés par les utilisateurs (cours, blogs, podcasts, newsletters et contenus de newsletter) intègrent un champ `organizationId` pour stocker l'organisation éditrice.
+- **Table `publisher_org_request`** (dans `V77__education_core.sql`) : Gère les demandes de statut d'organisation éditrice (statut `PENDING`, `APPROVED`, `REJECTED` ou `SUSPENDED`).
+- **Contrôles à la création** : Si l'organisation n'est pas approuvée (statut différent de `APPROVED` dans `publisher_org_request`), la création de contenu ou de newsletter est rejetée (`403 FORBIDDEN`).
+- **Validation à deux niveaux (Phases 3 & 4)** : 
+  - Les contenus de l'organisation passent d'abord par le statut intermédiaire `ORG_APPROVED` (validation par l'administrateur de l'organisation).
+  - La validation finale de publication s'effectue ensuite par l'administrateur de la plateforme (statut `APPROVED`).
+
+### 16.2 Résolution dynamique de l'Organisation Plateforme (Sécurité)
+Afin d'éviter de coder en dur les UUID (comme `…002` pour YowNews), nous avons mis en place une détection dynamique :
+- **Côté KSM (Java)** :
+  - Création des ports `PlatformOrgCheckPort` (`education-core`) et `PublisherOrgCheckPort` (`newsletter-core`).
+  - L'implémentation de ces ports dans `bootstrap` (`EducationPlatformOrgCheckPort` et `EducationPublisherOrgCheckPort`) compare les ID reçus dans le contexte avec la propriété de configuration `YowNewsAdminBootstrapProperties.organizationId` (définie dans `application.yml`).
+- **Côté YowNews (BFF & Frontend)** :
+  - Les API BFF et les pages du frontend comparent le code de l'espace de travail actif (`session.workspace.organizationCode`) avec la variable d'environnement du tenant `KSM_PLATFORM_ORG_CODE` (définie dans `.env.local` et valant `"YOWNEWS"` par défaut) pour savoir si l'utilisateur est dans le contexte général de lecture.
+
+### 16.3 BFF et Pages du Frontend
+- **KSM Client** : [publisher-orgs.ts](file:///home/devstack/Documents/frontend/yownews/src/server/ksm/modules/publisher-orgs.ts) centralise les appels KSM.
+- **BFF Endpoints** :
+  - `POST/GET /api/publisher-orgs` : soumettre ou lister les candidatures d'organisation.
+  - `PUT /api/publisher-orgs/[id]/decide` : validation par le super-admin (APPROVED, REJECTED, SUSPENDED).
+  - `GET/POST /api/org/employees` : gestion des collaborateurs de l'organisation active.
+- **Pages de l'application** :
+  - **Candidature d'organisation** : [org-publisher/page.tsx](file:///home/devstack/Documents/frontend/yownews/src/app/%5Blocale%5D/editor/org-publisher/page.tsx) permet à l'owner d'une organisation de postuler et de voir le statut de la demande.
+  - **Membres de l'organisation** : [my-org/page.tsx](file:///home/devstack/Documents/frontend/yownews/src/app/%5Blocale%5D/editor/my-org/page.tsx) permet à l'administrateur de l'organisation d'inviter de nouveaux collaborateurs ou de révoquer leur accès.
+  - **Modération d'organisation** : [admin/publisher-orgs/page.tsx](file:///home/devstack/Documents/frontend/yownews/src/app/%5Blocale%5D/admin/publisher-orgs/page.tsx) permet au super-administrateur de valider/suspendre les organisations éditrices.
+- **Sidebar** : Intégration des liens de navigation dynamique au sein de [AdminSidebar.tsx](file:///home/devstack/Documents/frontend/yownews/src/app/%5Blocale%5D/admin/_components/AdminSidebar.tsx).
+
+### 16.4 Problèmes résolus liés à l'inscription et la création d'utilisateurs
+
+Lors du développement du lot d'inscription des organisations et de la modération, plusieurs anomalies logiques et techniques majeures ont été corrigées et documentées ici :
+
+1. **Impasse logique du rattachement forcé (Catch-22)** :
+   - *Problème* : L'inscription d'une organisation forçait systématiquement le rattachement au tenant `"YOWNEWS"`, ce qui créait l'utilisateur comme simple membre de la plateforme globale sans possibilité d'y rattacher son organisation externe, le bloquant dans l'espace général.
+   - *Solution* : Cinématique d'inscription modifiée. Seul le propriétaire (**Owner**) d'une organisation KSM pré-existante s'inscrit en mode Organisation.
+   - *Champs masqués* : L'UI masque les champs de profil (`firstName`, `lastName`, `username`, `phone`) car le représentant possède déjà un compte KSM complet. Seuls `email`, `password` et `orgCode` (Code de l'organisation) sont saisis.
+   - *Vérification du rôle Owner* : Le BFF authentifie l'utilisateur sur KSM, sélectionne son contexte d'organisation et vérifie qu'il dispose de la permission `"tenant:admin"` (rôle `GENERAL_ADMIN`). Si ce n'est pas le cas, l'inscription est rejetée avec un code `403 NOT_OWNER` (*"Seul le propriétaire de l'organisation est autorisé à l'inscrire"*).
+
+2. **Bascule automatique en mode Particulier si l'organisation n'existe pas** :
+   - *Problème* : Si un utilisateur saisit un code d'organisation inexistant dans KSM, il ne peut pas s'inscrire ni se connecter.
+   - *Solution* : Si le code d'organisation saisi n'est pas trouvé dans KSM lors de la phase de découverte, le BFF retourne un statut `404 ORG_NOT_FOUND`. Le frontend intercepte cette erreur, affiche un message d'explication et bascule automatiquement le formulaire en mode **Particulier** (`individual`), révélant les champs masqués de nom/prénom/username pour qu'il s'inscrive comme simple lecteur.
+
+3. **Inversion des ports KSM (Application vs Management/Actuator)** :
+   - *Problème* : Le BFF appelait le port `8081` de KSM (`KSM_BASE_URL`). En mode local (`--kernel-local`), le port `8081` correspond au serveur d'administration (Spring Actuator) et ne répond pas aux routes métiers, renvoyant des erreurs `404 Not Found` (traduites en `500` par le BFF).
+   - *Solution* : Correction des variables d'environnement (`.env.local` et fallbacks dans `src/env.ts`) pour que `KSM_BASE_URL` pointe sur le port **`8080`**, qui est le port d'écoute réel des API métiers du noyau local KSM.
+
+4. **Suppression involontaire des migrations/seeds lors du réalignement Git** :
+   - *Problème* : Le réalignement de KSM sur la branche `main` a écrasé les modifications locales de `db.changelog-master.yaml`. Les inclusions des fichiers de schéma des 4 modules personnalisés (`education-core`, `ratings-core`, `newsletter-core`, `forum-core`) ainsi que les seeds de données YowNews (qui insèrent les clés d'API du client `yownews-frontend`) avaient disparu, causant des erreurs `401 Unauthorized` systématiques.
+   - *Solution* : Restauration des lignes d'inclusion des changelogs correspondants dans `db.changelog-master.yaml`, garantissant la création des tables et des enregistrements de sécurité nécessaires au démarrage de KSM.
+
+5. **Rôle admin `SUPER_EDUCATION_SERVICES_MANAGER` perdu par un merge KSM (session #5)** :
+   - *Problème* : Après un `git merge origin/main` sur la branche `mayega-git` (commit `336bbf15`), le fichier
+     `AdministrationApplicationService.java` a été remplacé par la version `origin/main`, qui ne contenait que les
+     rôles ERP génériques (`GENERAL_ADMIN`, `ORGANIZATION_ADMIN`, etc.). Tout le catalogue de rôles spécifique
+     YowNews (`SUPER_EDUCATION_SERVICES_MANAGER`, `EDUCATION_EDITOR_PERMISSIONS`, `EDUCATION_READER_PERMISSIONS`,
+     `EDUCATION_MANAGER`, `FORUM_*`, `NEWSLETTER_*`) avait disparu — présent au commit `12389278`, absent dès
+     `336bbf15` et toujours absent au moment du diagnostic (`5957d893`). Conséquence : `YowNewsAdminBootstrapInitializer`
+     échouait silencieusement à chaque démarrage KSM (`IllegalStateException` uniquement loguée) et ne pouvait
+     **jamais** réassigner le rôle admin après une base recréée — un simple redémarrage ne suffisait pas.
+   - *Solution* : Restauration à l'identique du bloc de constantes de permissions et des entrées `template(...)`
+     manquantes dans `AdministrationApplicationService.java` (`RT-comops-administration-core`), sans toucher aux
+     templates ERP existants. **KSM redevient intact/complet** — c'est une restauration de code perdu, pas un
+     ajout de fonctionnalité. Après recompilation et redémarrage, le bootstrap idempotent réassigne correctement
+     le rôle.
+
+6. **Gestion des utilisateurs simples : tentative « employees », abandonnée pour un mur KSM structurel,
+   solution finale = restauration de `ListTenantUsersUseCase` (session #5)** :
+   - *Contexte* : le même merge cassé (`336bbf15`, cf. point 5) avait aussi réduit `GET /api/administration/users`
+     (`ListTenantUsersUseCase`) à une version sans enrichissement (`AdministrationUserResponse` ne renvoyait plus
+     ni `roles`, ni `firstName`/`lastName`), ce qui faisait planter le dashboard admin (`Cannot read properties of
+     undefined (reading 'some')` dans `DashboardView.tsx`, `u.roles` étant `undefined`), et cassait la promotion
+     Lecteur→Rédacteur lors de la validation d'une candidature (`applicant.roles.filter` sur `undefined`).
+   - *Tentative 1 (abandonnée)* : reconstruire la gestion des utilisateurs simples sur le module
+     **organisation-core** existant (`employee_membership`, endpoints `/api/employees*`, déjà utilisé pour les
+     organisations éditrices externes, §16.3) plutôt que de restaurer le code perdu. Implémentée puis **entièrement
+     annulée** après avoir buté sur un mur structurel KSM, non lié aux rôles/permissions applicatifs :
+     - `PlatformServiceRouteResolver` (`RT-comops-kernel-core`) classe **toute** URL `/api/employees` comme
+       service **HRM** (mapping hérité de `RT-comops-hrm-core`, qui possède son propre contrôleur employés à une
+       autre URL, `/api/v1/hrm/employees` — pas de collision Spring, mais la table de routage de l'entitlement
+       filter, elle, ne distingue pas les deux).
+     - Ceci déclenche en cascade `ClientApplicationServiceEntitlementWebFilter` (le client `yownews-frontend`
+       doit être autorisé sur le service HRM) **puis** `OrganizationServiceEntitlementWebFilter` (l'organisation
+       YowNews doit être *abonnée* au service HRM) — deux couches de sécurité plateforme totalement hors sujet
+       pour YowNews, chacune révélée après avoir débloqué la précédente.
+     - Décision : ne pas continuer à contourner (chaque contournement engendre un nouveau blocage et un mensonge
+       de configuration — YowNews n'a jamais eu besoin du service HRM) ; revenir à la restauration pure du code
+       perdu (option la plus simple, déjà validée pour le point 5).
+   - **Solution retenue** : restauration à l'identique de `ListTenantUsersUseCase` tel qu'il existait au commit
+     `12389278` (avant le merge cassé) — agrégation user + actor + rôles, exposée sous `/api/administration/users`
+     (chemin **non concerné** par la table de routage HRM, donc aucun des murs ci-dessus). Toutes les tentatives
+     côté frontend (sign-up, page `/admin/users`, `DashboardView.tsx`, route `/api/org/employees`) ont été
+     **intégralement revertées** à leur état d'avant ce lot — le module organisation-core/`employee_membership`
+     reste utilisé, inchangé, uniquement pour les organisations éditrices externes (§16.3 : `my-org`,
+     `org-publisher`, `admin/publisher-orgs`), qui n'ont jamais été concernées par ce blocage.
+
+### Récapitulatif des changements KSM de ce lot (traçabilité)
+
+| Fichier | Changement | Statut final |
+|---|---|---|
+| `RT-comops-administration-core/.../AdministrationApplicationService.java` | Restauration des constantes de permissions et `template(...)` manquants (`EDUCATION_*`, `FORUM_*`, `NEWSLETTER_*`, `SUPER_EDUCATION_SERVICES_MANAGER`) + `RESERVED_ROLE_CODES` | **Conservé** (point 5) |
+| `RT-comops-administration-core/.../AdministrationApplicationService.java` | Restauration du champ `ActorRepository actorRepository` (+ param constructeur) et de `listTenantUsers(tenantId)` (agrégation user+actor+rôles, remplace la version bare `Flux<UserAccount>`) | **Conservé** (point 6) |
+| `RT-comops-administration-core/.../port/in/ListTenantUsersUseCase.java` | Restauration de l'interface enrichie (`TenantUserView`/`TenantUserRoleView`), remplace `Flux<UserAccount>` | **Conservé** (point 6) |
+| `RT-comops-administration-core/.../adapter/in/web/AdministrationUserResponse.java` | Restauration du DTO avec `roles: List<RoleRef>`, `firstName`, `lastName` (mappé depuis `TenantUserView`) | **Conservé** (point 6) |
+| `RT-comops-actor-core/.../ActorRepository.java` (+ adapters R2DBC/InMemory/SpringData) | Restauration de `findByTenantId(tenantId)` sur toute la stack (nécessaire à `listTenantUsers`) | **Conservé** (point 6) |
+| `RT-comops-bootstrap/.../db/r2dbc/V81__yownews_seed.sql` | Ajout de `'HRM'` à `allowed_service_codes` du client `yownews-frontend` (test de la tentative 1) | **Annulé** — retiré, tableau redevient `['ORGANIZATION','SETTINGS','EDUCATION','NEWSLETTER','FORUM','RATINGS']` |
+
+⚠️ La base ayant été recréée pendant la tentative 1 (donc avec `HRM` dans `allowed_service_codes`), une requête
+SQL manuelle de nettoyage a été fournie séparément (ou une nouvelle recréation de base, puisque le seed est
+maintenant corrigé).
+
+
+---
+
+## 17. Newsletter : auto-publication des contenus + envoi email MailHog (session #6)
+
+> ⚠️ Remplace §15.3 (obsolète) : le consumer email a été re-branché depuis (notification-core
+> réactivé dans le pom bootstrap, `NewsletterContentPublishedConsumer` + `NewsletterEmailPort` +
+> adaptateur `NotificationCoreNewsletterEmailAdapter` dans bootstrap → `EmailSmtpSenderAdapter` SMTP).
+
+### 17.1 Plus de validation admin des CONTENUS
+Décision : une fois la **publication** (NewsletterEntity) validée par l'admin (circuit conservé),
+le rédacteur publie ses contenus **lui-même** : DRAFT → PUBLISHED directement.
+Le circuit **ORG_APPROVED reste intact** (publication au nom d'une org externe : `submit` +
+`org-approve` conservés ; publier exige ORG_APPROVED pour un contenu d'org).
+- KSM `NewsletterContentController` : `POST /contents/{id}/publish` gate `create` OU `manage`,
+  + param `userId` ; endpoints `validate`/`reject` **supprimés**.
+- `NewsletterContentService.publish(contentId, userId)` : garde d'appartenance (authorId du contenu
+  OU redacteurId de la newsletter, sinon 403), refuse un contenu déjà PUBLISHED, exige ORG_APPROVED
+  pour un contenu d'org externe ; émet toujours `NEWSLETTER_CONTENT_PUBLISHED`.
+- Frontend : `NewsletterWorkspace` (ContentSpace) → bouton **Publier** (confirm) au lieu de
+  « Soumettre » ; onglet admin « Contenus » retiré (`moderation/page.tsx` ne rend plus que
+  `NewsletterPublicationModeration` ; `NewsletterContentModeration.tsx` supprimé ; l'onglet
+  « Validation de contenu » de `RedacteursWorkspace` retiré aussi). Routes BFF
+  `contents/[id]/{validate,reject}` supprimées ; `publish` passe `session.user.id`.
+
+### 17.2 Cause racine « rien dans MailHog » = config SMTP absente
+`SPRING_MAIL_HOST` était **vide** dans `KSM_Kernel_Layer/.env` et aucun profil ne définissait
+`spring.mail.*` → pas de bean `JavaMailSender` → chaque envoi échouait avec « SMTP is not
+configured », erreur avalée (consumer best-effort). Fix :
+- `application-local.yml` : `spring.mail` → localhost:1025 (MailHog), auth/starttls off,
+  `iwm.notifications.email.from: newsletter@yownews.local` (sans From, JavaMail refuse d'envoyer).
+- `.env` : mêmes valeurs (`SPRING_MAIL_HOST=localhost`, `SPRING_MAIL_PORT=1025`, auth/tls false,
+  `IWM_NOTIFICATIONS_EMAIL_FROM`).
+⚠️ Précision (constatée au test) : `start-full-stack.sh --kernel-local` source **`.env.local`**
+(non versionné) et active le profil **`r2dbc`** — c'est donc `.env.local` qui porte la config
+mail effective (`SPRING_MAIL_*` + `IWM_NOTIFICATIONS_EMAIL_FROM`), pas `application-local.yml`.
+Rappel : les emails vont aux **abonnés des catégories** de la newsletter ET aux **followers du
+rédacteur** (`LecteurRedacteurAbonnement`, depuis session #6bis) — sans abonné, aucun envoi.
+UI MailHog : :8025. L'email est un template HTML (titre, cover en data URI, contenu TipTap,
+footer) construit dans `NewsletterContentPublishedConsumer`.
+
+### 17.3 Fix colonne « Auteur » vide en modération des newsletters
+La chaîne authorNom/Prenom était intacte ; cause = comptes sans firstName/lastName (inscription
+mode organisation, champs masqués). Fix BFF (`api/newsletter/newsletters/route.ts` POST) :
+fallback `username` puis `email` quand nom+prénom vides. Donnée existante à corriger à la main
+(`UPDATE newsletter.newsletter_entity SET author_nom=… WHERE id=…`) ou en recréant la newsletter.

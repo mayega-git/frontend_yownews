@@ -19,14 +19,14 @@ const NAV: { label: string; items: NavItem[] }[] = [
     items: [
       { href: '/admin/users', label: 'Utilisateurs', enabled: true, adminOnly: true, icon: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg> },
       { href: '/admin/role-requests', label: 'Demandes', enabled: true, adminOnly: true, icon: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M16 21v-2a4 4 0 00-4-4H6a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM19 8v6M22 11h-6"/></svg> },
-      { href: '/admin/newsletters', label: 'Newsletters', enabled: true, icon: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg> },
+      { href: '/admin/publisher-orgs', label: 'Modération Orgs', enabled: true, adminOnly: true, icon: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5"/></svg> },
+      { href: '/editor/org-publisher', label: 'Statut Rédacteur Org', enabled: true, icon: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5"/></svg> },
+      { href: '/editor/my-org', label: 'Membres Org', enabled: true, icon: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857"/></svg> },
     ],
   },
   {
     label: 'Communauté',
-    items: [
-      { href: '/admin/forums', label: 'Forums', enabled: true, icon: <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg> },
-    ],
+    items: [],
   },
   {
     label: 'Mon Compte',
@@ -37,9 +37,6 @@ const NAV: { label: string; items: NavItem[] }[] = [
   },
 ];
 
-// Nav du Lecteur : seul « Mon Profil » est fonctionnel (les routes /admin/* sont admin-gardées).
-// Notifications/Forums/Paramètres restent en stubs grisés pour ressembler à l'espace admin, sans
-// les onglets Utilisateurs/Tableau de bord/Education/Newsletters.
 const READER_NAV: { label: string; items: NavItem[] }[] = [
   {
     label: 'Général',
@@ -68,7 +65,6 @@ function initials(name: string) {
   return name.split(' ').map((w) => w[0]).join('').toUpperCase().slice(0, 2);
 }
 
-// Modale d'évaluation de la plateforme — POST /api/ratings/evaluate (note 1-5 + commentaire libre).
 function EvaluateAppModal({ onClose }: { onClose: () => void }) {
   const [score, setScore] = useState(0);
   const [feedback, setFeedback] = useState('');
@@ -129,39 +125,39 @@ function EvaluateAppModal({ onClose }: { onClose: () => void }) {
 
 const SIDEBAR_COLLAPSE_KEY = 'yn:sidebar-collapsed';
 
-export default function AdminSidebar({ displayName, variant = 'admin' }: { displayName: string; email: string; variant?: 'admin' | 'editor' | 'reader' }) {
+export default function AdminSidebar({ displayName, variant = 'admin', roleBadge }: { displayName: string; email: string; variant?: 'admin' | 'editor' | 'reader'; roleBadge: string }) {
   const pathname = usePathname();
   const router = useRouter();
   const [educationOpen, setEducationOpen] = useState(true);
   const [feedOpen, setFeedOpen] = useState(true);
+  const [newsletterOpen, setNewsletterOpen] = useState(
+    () => pathname.startsWith('/admin/newsletters') || pathname === '/editor/newsletter'
+  );
+  const [forumOpen, setForumOpen] = useState(
+    () => pathname.startsWith('/admin/forums') || pathname === '/editor/forum'
+  );
   const [collapsed, setCollapsed] = useState(false);
   const [evalOpen, setEvalOpen] = useState(false);
 
-  // Persiste l'état replié/déplié (hamburger) et le reflète au conteneur principal via une
-  // variable CSS partagée — évite de faire remonter cet état dans 3 layouts serveur distincts.
-  // Synchronisation avec un système externe (localStorage) au montage — cas justifié malgré le lint.
   useEffect(() => {
     try {
       const stored = window.localStorage.getItem(SIDEBAR_COLLAPSE_KEY);
       // eslint-disable-next-line react-hooks/set-state-in-effect
       if (stored === '1') setCollapsed(true);
-    } catch { /* navigation privée / quota — on garde l'état déplié par défaut */ }
+    } catch { /* navigation privée / quota */ }
   }, []);
   useEffect(() => {
     document.documentElement.style.setProperty('--sb-w', collapsed ? '72px' : '260px');
     try { window.localStorage.setItem(SIDEBAR_COLLAPSE_KEY, collapsed ? '1' : '0'); } catch { /* idem */ }
   }, [collapsed]);
 
+  // Le variant ne pilote que la navigation ; le badge de rôle vient de la session (prop roleBadge).
   const isAdmin = variant === 'admin';
   const isReader = variant === 'reader';
-  const roleBadge = isAdmin ? 'Administrateur' : isReader ? 'Lecteur' : 'Éditeur';
 
-  // Préfixe de l'espace courant : chaque espace a ses propres pages (les routes
-  // /admin/* sont admin-gardées, donc on réécrit Feed/Tableau de bord/Profil par espace).
   const spacePrefix = isReader ? '/reader' : isAdmin ? '/admin' : '/editor';
   const profileHref = `${spacePrefix}/profile`;
 
-  // Badge « Utilisateurs » = vrai nombre de comptes du tenant (admin uniquement).
   const [userCount, setUserCount] = useState<number | null>(null);
   useEffect(() => {
     if (!isAdmin) return;
@@ -170,30 +166,30 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
       try {
         const u = await apiFetch<unknown[]>('/api/admin/users');
         if (!cancelled) setUserCount(Array.isArray(u) ? u.length : null);
-      } catch {
-        /* badge masqué si indisponible */
-      }
+      } catch { /* badge masqué si indisponible */ }
     })();
     return () => { cancelled = true; };
   }, [isAdmin]);
-  // Lecteur : nav minimal dédié. Sinon (admin/éditeur) on filtre le NAV admin (les entrées
-  // adminOnly comme Utilisateurs sont masquées hors admin). Les groupes vides ne sont pas rendus.
+
   const navGroups = isReader
     ? READER_NAV
     : NAV
         .map((group) => ({ ...group, items: group.items.filter((item) => isAdmin || !item.adminOnly) }))
-        .filter((group) => group.items.length > 0 || group.label === 'Gestion');
+        .filter((group) => group.items.length > 0 || group.label === 'Gestion' || group.label === 'Communauté');
 
-  // Label de la section active affiché dans le header de la sidebar (remplace "YowNews").
   const activeLabel = (() => {
+    if (pathname.startsWith('/admin/newsletters') || pathname === '/editor/newsletter') return 'Newsletter';
+    if (pathname.startsWith('/admin/forums') || pathname === '/editor/forum') return 'Forums';
+    if (pathname.startsWith('/admin/blogs') || pathname.startsWith('/editor/blog')) return 'Blog';
+    if (pathname.startsWith('/admin/courses') || pathname.startsWith('/editor/course')) return 'Cours';
+    if (pathname.startsWith('/admin/podcasts') || pathname.startsWith('/editor/podcast')) return 'Podcast';
     for (const group of navGroups) {
       for (const item of group.items) {
         const href =
           item.label === 'Mon Profil' ? profileHref
           : item.label === 'Tableau de bord' ? `${spacePrefix}/dashboard`
           : item.label === 'Favoris' ? `${spacePrefix}/favorites`
-          : item.label === 'Newsletters' ? (isAdmin ? '/admin/newsletters' : '/editor/newsletter')
-          : item.label === 'Forums' ? (isAdmin ? '/admin/forums' : '/reader/forums')
+          : item.label === 'Forums' ? (isAdmin ? '/admin/forums' : isReader ? '/reader/forums' : '/editor/forum')
           : item.href;
         if (pathname === href || pathname.startsWith(href + '/')) return item.label;
       }
@@ -205,14 +201,15 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
     try {
       await apiFetch('/api/auth/logout', { method: 'POST' });
     } catch {
-      // ignore — on déconnecte localement de toute façon
+      // ignore
     }
     router.push('/auth/login');
   }
 
-  // Sous-lien indenté de dropdown (Feed/Education) — actif/hover cohérents avec le reste de la nav.
-  function renderSubLink(href: string, label: string) {
-    const active = pathname === href || pathname.startsWith(href + '/');
+  // exact=true : le lien n'est actif que si le chemin correspond exactement
+  // (evite que /admin/blogs soit marque actif quand on est sur /admin/blogs/moderation)
+  function renderSubLink(href: string, label: string, exact = false) {
+    const active = exact ? pathname === href : (pathname === href || pathname.startsWith(href + '/'));
     return (
       <Link key={href} href={href} style={{
         display: 'flex', alignItems: 'center', gap: '8px',
@@ -232,6 +229,17 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
     );
   }
 
+  function renderSectionLabel(label: string) {
+    return (
+      <div style={{
+        padding: '6px 12px 2px 30px', fontSize: '10px', fontWeight: 700,
+        letterSpacing: '1px', textTransform: 'uppercase', color: 'rgba(255,255,255,.35)',
+      }} className="sb-text">
+        {label}
+      </div>
+    );
+  }
+
   return (
     <>
       <aside style={{
@@ -239,14 +247,16 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
         background: 'var(--primary)', display: 'flex', flexDirection: 'column',
         zIndex: 200, overflowY: 'auto', transition: 'width .3s ease',
       }} className={collapsed ? 'sb sb-collapsed' : 'sb'}>
-        {/* Section active + bascule (× / hamburger) */}
-        <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', gap: '10px', flexShrink: 0 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
-            <Link href="/" style={{ width: '34px', height: '34px', background: 'linear-gradient(135deg,var(--blue),var(--accent))', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: '14px', color: '#fff', flexShrink: 0, textDecoration: 'none' }}>YN</Link>
-            <span style={{ fontFamily: 'var(--font-d)', fontSize: '16px', fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }} className="sb-text">
-              {activeLabel}
-            </span>
-          </div>
+        {/* Header */}
+        <div style={{ padding: '20px', borderBottom: '1px solid rgba(255,255,255,.1)', display: 'flex', alignItems: 'center', justifyContent: collapsed ? 'center' : 'space-between', gap: '10px', flexShrink: 0 }}>
+          {!collapsed && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '10px', flex: 1, minWidth: 0 }}>
+              <Link href="/" style={{ width: '34px', height: '34px', background: 'linear-gradient(135deg,var(--blue),var(--accent))', borderRadius: '8px', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: '14px', color: '#fff', flexShrink: 0, textDecoration: 'none' }}>YN</Link>
+              <span style={{ fontFamily: 'var(--font-d)', fontSize: '16px', fontWeight: 800, color: '#fff', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                {activeLabel}
+              </span>
+            </div>
+          )}
           <button
             type="button"
             onClick={() => setCollapsed((c) => !c)}
@@ -283,13 +293,10 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
                 {group.label}
               </div>
               {group.items.map((item) => {
-                // Profil/Tableau de bord/Favoris pointent vers l'espace courant ; le badge
-                // « Utilisateurs » est le vrai compte.
                 const href =
                   item.label === 'Mon Profil' ? profileHref
                   : item.label === 'Tableau de bord' ? `${spacePrefix}/dashboard`
                   : item.label === 'Favoris' ? `${spacePrefix}/favorites`
-                  : item.label === 'Newsletters' ? (isAdmin ? '/admin/newsletters' : '/editor/newsletter')
                   : item.label === 'Forums' ? (isAdmin ? '/admin/forums' : '/reader/forums')
                   : item.href;
                 const badgeValue = item.label === 'Utilisateurs' ? userCount : item.badge ?? null;
@@ -304,7 +311,6 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
                   <span style={{ minWidth: '18px', height: '18px', borderRadius: '9px', background: 'var(--accent)', color: '#fff', fontSize: '10px', fontWeight: 700, fontFamily: 'var(--font-d)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 5px' }} className="sb-text">{badgeValue}</span>
                 ) : null;
 
-                // Entrées non encore implémentées : grisées, non cliquables
                 if (!item.enabled) {
                   return (
                     <div key={item.href} title="Bientôt disponible" style={{
@@ -336,7 +342,7 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
                 );
               })}
 
-              {/* Dropdown Feed (après Général) : consulter le contenu publié, par type — jamais mélangé. */}
+              {/* Dropdown Feed */}
               {group.label === 'Général' && (
                 <>
                   <button onClick={() => setFeedOpen((o) => !o)} style={{
@@ -365,9 +371,10 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
                 </>
               )}
 
-              {/* Dropdown Education (après Gestion) : Blogs/Podcasts/Cours grisés + Catégories/Tags live */}
+              {/* Dropdown Education + Newsletter (après Gestion) */}
               {group.label === 'Gestion' && !isReader && (
                 <>
+                  {/* Education */}
                   <button onClick={() => setEducationOpen((o) => !o)} style={{
                     display: 'flex', alignItems: 'center', gap: '10px', width: 'calc(100% - 20px)',
                     margin: '1px 10px', padding: '10px 20px', borderRadius: '8px', border: 'none',
@@ -386,34 +393,140 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
 
                   {educationOpen && (
                     <div className="sb-text" style={{ marginBottom: '4px' }}>
-                      {/* Blogs/Cours/Podcasts : liens réels pour l'admin (gestion + espace perso) et l'éditeur. */}
-                      {!isReader && renderSubLink(isAdmin ? '/admin/blogs' : '/editor/blog', 'Blogs')}
-                      {!isReader && renderSubLink(isAdmin ? '/admin/courses' : '/editor/course', 'Cours')}
-                      {!isReader && renderSubLink(isAdmin ? '/admin/podcasts' : '/editor/podcast', 'Podcasts')}
-                      {(isAdmin ? [
-                        { href: '/admin/categories', label: 'Catégories' },
-                        { href: '/admin/tags', label: 'Tags' },
-                      ] : []).map((sub) => {
-                        const active = pathname === sub.href || pathname.startsWith(sub.href + '/');
-                        return (
-                          <Link key={sub.href} href={sub.href} style={{
-                            display: 'flex', alignItems: 'center', gap: '8px',
-                            margin: '1px 10px', padding: '8px 12px 8px 30px', borderRadius: '8px',
-                            fontSize: '12.5px', fontWeight: 600, textDecoration: 'none', whiteSpace: 'nowrap',
-                            color: active ? '#fff' : 'rgba(255,255,255,.7)',
-                            background: active ? 'rgba(255,255,255,.12)' : 'transparent',
-                            borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
-                            transition: 'all .2s',
-                          }}
-                            onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.08)'; (e.currentTarget as HTMLElement).style.color = '#fff'; } }}
-                            onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.7)'; } }}
-                          >
-                            <span style={{ width: '5px', height: '5px', borderRadius: '50%', background: 'currentColor', flexShrink: 0, opacity: 0.6 }} />
-                            {sub.label}
-                          </Link>
-                        );
-                      })}
+                      {isAdmin ? (
+                        <>
+                          {renderSectionLabel('Blog')}
+                          {renderSubLink('/admin/blogs', 'Mes blogs', true)}
+                          {renderSubLink('/admin/blogs/moderation', 'Gestion des blogs')}
+
+                          {renderSectionLabel('Cours')}
+                          {renderSubLink('/admin/courses', 'Mes cours', true)}
+                          {renderSubLink('/admin/courses/moderation', 'Gestion des cours')}
+
+                          {renderSectionLabel('Podcast')}
+                          {renderSubLink('/admin/podcasts', 'Mes podcasts', true)}
+                          {renderSubLink('/admin/podcasts/moderation', 'Gestion des podcasts')}
+
+                          {renderSectionLabel('Taxonomie')}
+                          {renderSubLink('/admin/categories', 'Catégories')}
+                          {renderSubLink('/admin/tags', 'Tags')}
+                        </>
+                      ) : (
+                        <>
+                          {renderSubLink('/editor/blog', 'Blogs')}
+                          {renderSubLink('/editor/course', 'Cours')}
+                          {renderSubLink('/editor/podcast', 'Podcasts')}
+                        </>
+                      )}
                     </div>
+                  )}
+
+                  {/* Newsletter : dropdown (admin) ou lien direct (éditeur) */}
+                  {isAdmin ? (
+                    <>
+                      <button onClick={() => setNewsletterOpen((o) => !o)} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', width: 'calc(100% - 20px)',
+                        margin: '1px 10px', padding: '10px 20px', borderRadius: '8px', border: 'none',
+                        background: 'transparent', color: 'rgba(255,255,255,.7)', fontSize: '13px',
+                        cursor: 'pointer', textAlign: 'left', transition: 'all .2s', whiteSpace: 'nowrap',
+                      }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.08)'; (e.currentTarget as HTMLElement).style.color = '#fff'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.7)'; }}
+                      >
+                        <span style={{ flexShrink: 0 }}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg>
+                        </span>
+                        <span style={{ flex: 1 }} className="sb-text">Newsletter</span>
+                        <svg className="sb-text" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ flexShrink: 0, transform: newsletterOpen ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }}><path d="M9 18l6-6-6-6" /></svg>
+                      </button>
+                      {newsletterOpen && (
+                        <div className="sb-text" style={{ marginBottom: '4px' }}>
+                          {renderSubLink('/admin/newsletters', 'Mes newsletters', true)}
+                          {renderSubLink('/admin/newsletters/moderation', 'Gestion des newsletters')}
+                          {renderSubLink('/admin/newsletters/categories', 'Catégories')}
+                          {renderSubLink('/admin/newsletters/redacteurs', 'Rédacteurs')}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    (() => {
+                      const active = pathname === '/editor/newsletter' || pathname.startsWith('/editor/newsletter/');
+                      return (
+                        <Link href="/editor/newsletter" style={{
+                          display: 'flex', alignItems: 'center', gap: '10px',
+                          padding: active ? '10px 20px 10px 17px' : '10px 20px',
+                          margin: '1px 10px', borderRadius: '8px', fontSize: '13px',
+                          transition: 'all .2s', whiteSpace: 'nowrap', textDecoration: 'none',
+                          color: active ? '#fff' : 'rgba(255,255,255,.7)',
+                          background: active ? 'rgba(255,255,255,.12)' : 'transparent',
+                          borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
+                          cursor: 'pointer',
+                        }}
+                          onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.08)'; (e.currentTarget as HTMLElement).style.color = '#fff'; } }}
+                          onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.7)'; } }}
+                        >
+                          <span style={{ flexShrink: 0 }}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><path d="M22 6l-10 7L2 6"/></svg>
+                          </span>
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }} className="sb-text">Newsletter</span>
+                        </Link>
+                      );
+                    })()
+                  )}
+                </>
+              )}
+
+              {/* Forums : dropdown (admin) ou lien direct (éditeur) — Communauté section */}
+              {group.label === 'Communauté' && !isReader && (
+                <>
+                  {isAdmin ? (
+                    <>
+                      <button onClick={() => setForumOpen((o) => !o)} style={{
+                        display: 'flex', alignItems: 'center', gap: '10px', width: 'calc(100% - 20px)',
+                        margin: '1px 10px', padding: '10px 20px', borderRadius: '8px', border: 'none',
+                        background: 'transparent', color: 'rgba(255,255,255,.7)', fontSize: '13px',
+                        cursor: 'pointer', textAlign: 'left', transition: 'all .2s', whiteSpace: 'nowrap',
+                      }}
+                        onMouseEnter={(e) => { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.08)'; (e.currentTarget as HTMLElement).style.color = '#fff'; }}
+                        onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.7)'; }}
+                      >
+                        <span style={{ flexShrink: 0 }}>
+                          <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                        </span>
+                        <span style={{ flex: 1 }} className="sb-text">Forums</span>
+                        <svg className="sb-text" width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ flexShrink: 0, transform: forumOpen ? 'rotate(90deg)' : 'none', transition: 'transform .2s' }}><path d="M9 18l6-6-6-6" /></svg>
+                      </button>
+                      {forumOpen && (
+                        <div className="sb-text" style={{ marginBottom: '4px' }}>
+                          {renderSubLink('/admin/forums', 'Mes forums', true)}
+                          {renderSubLink('/admin/forums/moderation', 'Gestion des forums')}
+                        </div>
+                      )}
+                    </>
+                  ) : (
+                    (() => {
+                      const active = pathname === '/editor/forum' || pathname.startsWith('/editor/forum/');
+                      return (
+                        <Link href="/editor/forum" style={{
+                          display: 'flex', alignItems: 'center', gap: '10px',
+                          padding: active ? '10px 20px 10px 17px' : '10px 20px',
+                          margin: '1px 10px', borderRadius: '8px', fontSize: '13px',
+                          transition: 'all .2s', whiteSpace: 'nowrap', textDecoration: 'none',
+                          color: active ? '#fff' : 'rgba(255,255,255,.7)',
+                          background: active ? 'rgba(255,255,255,.12)' : 'transparent',
+                          borderLeft: active ? '3px solid var(--accent)' : '3px solid transparent',
+                          cursor: 'pointer',
+                        }}
+                          onMouseEnter={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,.08)'; (e.currentTarget as HTMLElement).style.color = '#fff'; } }}
+                          onMouseLeave={(e) => { if (!active) { (e.currentTarget as HTMLElement).style.background = 'transparent'; (e.currentTarget as HTMLElement).style.color = 'rgba(255,255,255,.7)'; } }}
+                        >
+                          <span style={{ flexShrink: 0 }}>
+                            <svg fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" width="17" height="17"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+                          </span>
+                          <span style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis' }} className="sb-text">Forums</span>
+                        </Link>
+                      );
+                    })()
                   )}
                 </>
               )}
@@ -421,7 +534,7 @@ export default function AdminSidebar({ displayName, variant = 'admin' }: { displ
           ))}
         </nav>
 
-        {/* Évaluer l'application — séparé du logout par un espacement propre. */}
+        {/* Évaluer */}
         <div style={{ padding: '8px 10px 0', flexShrink: 0 }}>
           <button onClick={() => setEvalOpen(true)} style={{
             display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 20px', borderRadius: '8px',

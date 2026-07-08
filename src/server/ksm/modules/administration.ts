@@ -35,6 +35,9 @@ export type AdminRole = {
 // Codes de rôle RBAC du module education.
 export const ROLE_CODE_EDITOR = 'EDUCATION_EDITOR_PERMISSIONS';
 export const ROLE_CODE_READER = 'EDUCATION_READER_PERMISSIONS';
+// Codes de rôle RBAC du module newsletter.
+export const ROLE_CODE_NEWSLETTER_EDITOR = 'NEWSLETTER_EDITOR';
+export const ROLE_CODE_NEWSLETTER_READER = 'NEWSLETTER_READER';
 
 export function listTenantUsers(session: AppSession) {
   return callKsm<AdminUser[]>('/api/administration/users', { method: 'GET' }, { session });

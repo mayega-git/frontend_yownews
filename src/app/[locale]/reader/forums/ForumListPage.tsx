@@ -1,9 +1,12 @@
 'use client';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { AppLink } from '@/components/ui/app-link';
 
+type GroupType = 'FORUM' | 'COMMUNITY' | 'PUBLIC';
 type DiscussionGroup = { groupId: string; name: string; description?: string | null; type: string; createdAt?: string | null };
+
+const TYPE_LABELS: Record<GroupType, string> = { FORUM: 'Forum', COMMUNITY: 'Communauté', PUBLIC: 'Forum public' };
 
 export default function ForumListPage() {
   const [groups, setGroups] = useState<DiscussionGroup[]>([]);
@@ -12,21 +15,31 @@ export default function ForumListPage() {
   const [newDesc, setNewDesc] = useState('');
   const [showForm, setShowForm] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
 
-  useEffect(() => {
-    apiFetch<DiscussionGroup[]>('/api/forum/groups')
-      .then((data) => { setGroups(Array.isArray(data) ? data : []); setLoading(false); })
-      .catch(() => setLoading(false));
+  const load = useCallback(async () => {
+    try {
+      const data = await apiFetch<DiscussionGroup[]>('/api/forum/groups');
+      setGroups(Array.isArray(data) ? data : []);
+    } catch { setGroups([]); }
+    finally { setLoading(false); }
   }, []);
+
+  useEffect(() => { load(); }, [load]);
 
   const createGroup = async () => {
     if (!newName.trim() || busy) return;
     setBusy(true);
+    setMessage(null);
     try {
-      await apiFetch('/api/forum/groups', { method: 'POST', body: { name: newName.trim(), description: newDesc.trim() || undefined, type: 'FORUM' } });
+      const body: Record<string, unknown> = { name: newName.trim(), description: newDesc.trim() || undefined, type: 'PUBLIC' };
+      await apiFetch('/api/forum/groups', { method: 'POST', body });
       setNewName(''); setNewDesc(''); setShowForm(false);
-      // Recharge la liste (le groupe créé est PENDING, ne sera visible qu'après validation admin)
-    } catch { /* best-effort */ }
+      setMessage({ kind: 'ok', text: 'Votre forum a été soumis à validation par un administrateur.' });
+      load(); // Recharge la liste
+    } catch (e) {
+      setMessage({ kind: 'err', text: e instanceof Error ? e.message : 'Échec de la création' });
+    }
     finally { setBusy(false); }
   };
 
@@ -34,10 +47,14 @@ export default function ForumListPage() {
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '24px' }}>
         <h1 style={{ fontFamily: 'var(--font-d)', fontSize: '24px', fontWeight: 800, margin: 0 }}>Forums</h1>
-        <button type="button" onClick={() => setShowForm((v) => !v)} style={{ border: 'none', borderRadius: '8px', padding: '8px 16px', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
+        <button type="button" onClick={() => { setShowForm((v) => !v); setMessage(null); }} style={{ border: 'none', borderRadius: '8px', padding: '8px 16px', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
           {showForm ? 'Annuler' : '+ Proposer un forum'}
         </button>
       </div>
+
+      {message && (
+        <div style={{ padding: '10px 12px', borderRadius: '8px', fontSize: '13px', marginBottom: '16px', background: message.kind === 'ok' ? 'rgba(16,185,129,.1)' : '#FEF2F2', color: message.kind === 'ok' ? '#059669' : '#B91C1C' }}>{message.text}</div>
+      )}
 
       {showForm && (
         <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: '12px', padding: '18px', marginBottom: '20px', display: 'flex', flexDirection: 'column', gap: '10px' }}>
@@ -64,7 +81,7 @@ export default function ForumListPage() {
             >
               <div style={{ fontWeight: 700, fontSize: '16px', marginBottom: '4px' }}>{g.name}</div>
               {g.description && <div style={{ fontSize: '13px', color: 'var(--gray-500)', marginBottom: '6px' }}>{g.description}</div>}
-              <span style={{ fontSize: '11px', color: 'var(--gray-400)', background: 'var(--gray-100)', padding: '2px 8px', borderRadius: '6px' }}>{g.type}</span>
+              <span style={{ fontSize: '11px', color: 'var(--gray-400)', background: 'var(--gray-100)', padding: '2px 8px', borderRadius: '6px' }}>{TYPE_LABELS[g.type as GroupType] ?? g.type}</span>
             </AppLink>
           ))}
         </div>

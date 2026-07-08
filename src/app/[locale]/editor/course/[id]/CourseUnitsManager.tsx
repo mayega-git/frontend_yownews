@@ -54,7 +54,7 @@ export default function CourseUnitsManager({ courseId }: { courseId: string }) {
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '24px' }}>
         <button type="button" onClick={() => router.back()} style={{ border: '1px solid var(--gray-200)', borderRadius: '8px', padding: '6px 12px', background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>
-          ← Retour
+           Retour
         </button>
         <h1 style={{ fontFamily: 'var(--font-d)', fontSize: '22px', fontWeight: 800, margin: 0 }}>Unités du cours</h1>
       </div>

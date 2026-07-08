@@ -1,59 +1,34 @@
-type Course = {
-  img: string;
-  level: string;
-  levelClass: string;
-  title: string;
-  author: string;
-  meta: string;
-};
-
-const COURSES: Course[] = [
-  {
-    img: 'https://picsum.photos/seed/coding-senegal/800/380',
-    level: 'Débutant', levelClass: 'lvl-b',
-    title: 'Développement Web de Zéro au Métier',
-    author: 'par Moussa Kouyaté · Dakar', meta: '14 leçons · PDF inclus',
-  },
-  {
-    img: 'https://picsum.photos/seed/marketing-africa/800/380',
-    level: 'Intermédiaire', levelClass: 'lvl-i',
-    title: 'Marketing Digital pour les Marchés Africains',
-    author: 'par Aminata Bah · Conakry', meta: '16 leçons · PDF inclus',
-  },
-  {
-    img: 'https://picsum.photos/seed/entrepreneurship-africa/800/380',
-    level: 'Avancé', levelClass: 'lvl-a',
-    title: 'Lancer sa Startup en Afrique',
-    author: 'par Dr. Oumar Diop · Abidjan', meta: '22 leçons · PDF inclus',
-  },
-];
+'use client';
+import { Link } from '@/i18n/navigation';
+import { usePublicFeed } from './PublicFeedProvider';
+import { FeedCard } from './FeedCard';
+import { useSession } from '@/components/providers/session-provider';
 
 export function CoursesSection() {
+  const { data, loading } = usePublicFeed();
+  const { session } = useSession();
+  const isLoggedIn = !!session?.user;
+  const items = data.courses.slice(0, 3);
+  const seeAllHref = isLoggedIn ? '/reader/feed/cours' : '/public/cours';
+
   return (
-    <section className="sec-courses spy" id="cours" aria-labelledby="courses-h2">
-      <div className="container">
-        <div className="sec-hd">
+    <section id="cours" className="lv-section dark lv-grad" aria-labelledby="cours-h2">
+      <div className="lv-container">
+        <div className="lv-section-head">
           <div>
-            <div className="sec-eyebrow">Cours</div>
-            <h2 className="sec-title" id="courses-h2">Formez-vous pour <span className="highlight">l&apos;Afrique de demain</span></h2>
+            <span className="lv-tag light">COURS</span>
+            <h2 id="cours-h2">Commencez à apprendre aujourd&apos;hui</h2>
           </div>
-          <a href="#" className="sec-link">Tout le catalogue →</a>
+          <Link href={seeAllHref} className="lv-link-more">
+            Voir tous les cours
+          </Link>
         </div>
-        <div className="courses-grid">
-          {COURSES.map((c) => (
-            <div className="card course-card" key={c.title}>
-              <div className="ci">
-                <img src={c.img} alt={c.title} loading="lazy" />
-                <div className="ci-top"><span className="badge b-grn" style={{ fontSize: 9 }}>GRATUIT</span><span className={`bcat ${c.levelClass}`}>{c.level}</span></div>
-              </div>
-              <div className="cb">
-                <h3 className="ct">{c.title}</h3>
-                <p className="c-author">{c.author}</p>
-                <div className="c-meta"><svg width="12" height="12" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z" /><path d="M14 2v6h6" /></svg>{c.meta}</div>
-                <a href="#" className="btn btn-blue" style={{ width: '100%', justifyContent: 'center', fontSize: 13, padding: 9 }}>Voir le cours</a>
-              </div>
-            </div>
-          ))}
+        <div className="lv-grid-3">
+          {items.length > 0 ? (
+            items.map((c) => <FeedCard key={c.id} item={c} />)
+          ) : (
+            <div className="lv-empty">{loading ? 'Chargement des cours…' : 'Bientôt de nouveaux cours.'}</div>
+          )}
         </div>
       </div>
     </section>

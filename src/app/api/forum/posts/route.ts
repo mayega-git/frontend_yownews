@@ -15,9 +15,11 @@ export async function POST(request: NextRequest) {
     if (!title) return fail(400, 'VALIDATION_ERROR', 'title is required');
     if (!content) return fail(400, 'VALIDATION_ERROR', 'content is required');
     if (!groupId) return fail(400, 'VALIDATION_ERROR', 'groupId is required');
+    const authorName = [session.user.firstName, session.user.lastName].filter(Boolean).join(' ') || session.user.email;
     return forumApi.createPost(session, {
       title, content, groupId,
       authorId: session.user.id,
+      authorName,
       categoriesIds: Array.isArray(body.categoriesIds) ? body.categoriesIds : [],
     });
   });

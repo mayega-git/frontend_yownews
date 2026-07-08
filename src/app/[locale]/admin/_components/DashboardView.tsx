@@ -40,7 +40,7 @@ function StatCard({ label, value, color, href, sub }: { label: string; value: nu
       <div style={{ fontFamily: 'var(--font-d)', fontSize: 28, fontWeight: 700, color, lineHeight: 1, marginBottom: 4 }}>{value}</div>
       <div style={{ fontSize: 12, color: 'var(--gray-500)' }}>{label}</div>
       {sub && <div style={{ fontSize: 11, color: 'var(--gray-400)', marginTop: 4 }}>{sub}</div>}
-      <div style={{ fontSize: 11, color, marginTop: 8, fontFamily: 'var(--font-d)', fontWeight: 600 }}>Voir →</div>
+      <div style={{ fontSize: 11, color, marginTop: 8, fontFamily: 'var(--font-d)', fontWeight: 600 }}>Voir</div>
     </Link>
   );
 }
@@ -60,7 +60,7 @@ function BlogsStatCard({ published, pending, loading }: { published: number; pen
         </div>
       </div>
       <div style={{ fontSize: 12, color: 'var(--gray-500)', marginTop: 8 }}>Blogs</div>
-      <div style={{ fontSize: 11, color: '#7C3AED', marginTop: 8, fontFamily: 'var(--font-d)', fontWeight: 600 }}>Voir →</div>
+      <div style={{ fontSize: 11, color: '#7C3AED', marginTop: 8, fontFamily: 'var(--font-d)', fontWeight: 600 }}>Voir</div>
     </Link>
   );
 }
@@ -135,7 +135,7 @@ function AdminDashboard({ firstName }: { firstName: string }) {
       <div style={card}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 16 }}>
           <h3 style={{ fontFamily: 'var(--font-d)', fontSize: 15, fontWeight: 700, color: 'var(--dark)', margin: 0 }}>Demandes de rôle en attente</h3>
-          <Link href="/admin/role-requests" style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 600 }}>Voir tout →</Link>
+          <Link href="/admin/role-requests" style={{ fontSize: 12, color: 'var(--blue)', fontWeight: 600 }}>Voir tout</Link>
         </div>
         {loading ? (
           <div style={{ color: 'var(--gray-400)', fontSize: 14 }}>Chargement…</div>
@@ -165,13 +165,13 @@ function AdminDashboard({ firstName }: { firstName: string }) {
 function EditorDashboard({ firstName }: { firstName: string }) {
   return (
     <div>
-      <WelcomeBanner firstName={firstName} subtitle="Bienvenue dans l'espace éditeur · créez vos articles, podcasts et cours" />
+      <WelcomeBanner firstName={firstName} subtitle="Bienvenue dans l'espace rédacteur · créez vos articles, podcasts et cours" />
       <div style={{ ...card, maxWidth: 640 }}>
         <h3 style={{ fontFamily: 'var(--font-d)', fontSize: 15, fontWeight: 700, color: 'var(--dark)', margin: '0 0 8px' }}>Votre espace Rédacteur</h3>
         <p style={{ margin: '0 0 16px', color: 'var(--gray-600)', fontSize: 14 }}>
           Consultez votre profil et gérez vos contenus. La création de blogs, podcasts et cours arrive bientôt.
         </p>
-        <Link href="/editor/profile" className="btn btn-orange btn-sm">Mon profil →</Link>
+        <Link href="/editor/profile" className="btn btn-orange btn-sm">Mon profil</Link>
       </div>
     </div>
   );

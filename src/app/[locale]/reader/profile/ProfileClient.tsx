@@ -251,7 +251,7 @@ export default function ProfileClient({ displayName, email, view, roleLabel, blo
           )}
 
           <div style={{ marginTop: 18 }}>
-            <Link href={blogHref} className="btn btn-orange btn-sm">Gérer mes blogs →</Link>
+            <Link href={blogHref} className="btn btn-orange btn-sm">Gérer mes blogs</Link>
           </div>
         </div>
       ) : (

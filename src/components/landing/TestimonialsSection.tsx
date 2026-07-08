@@ -1,40 +1,49 @@
-type Testimonial = { quote: string; img: string; name: string; role: string };
-
-const TESTIMONIALS: Testimonial[] = [
+const TESTIMONIALS = [
   {
-    quote: "YowNews a complètement changé ma façon d'apprendre. Les articles sont d'une qualité rare et parlent de notre réalité africaine.",
-    img: 'https://picsum.photos/seed/testimonial-1/88/88', name: 'Ibrahim Coulibaly', role: 'Développeur web · Abidjan',
+    quote:
+      'Grâce aux cours de marketing digital, j’ai lancé ma petite boutique en ligne à Douala. Le contenu est clair et vraiment adapté à notre marché.',
+    name: 'Aïcha Ngono',
+    role: 'Entrepreneure, Douala',
   },
   {
-    quote: "J'ai pu me reconvertir en data science grâce aux formations de YowNews. Tout ça, gratuitement. Les exemples parlent de marchés que je connais.",
-    img: 'https://picsum.photos/seed/testimonial-2/88/88', name: 'Mariam Kaboré', role: 'Entrepreneuse · Ouagadougou',
+    quote:
+      'Les podcasts tech m’accompagnent chaque matin dans les embouteillages de Yaoundé. J’apprends énormément, et tout est gratuit.',
+    name: 'Hervé Tchoumi',
+    role: 'Développeur, Yaoundé',
   },
   {
-    quote: 'Les podcasts m\'accompagnent dans mes trajets. Écouter des leaders africains partager leurs expériences est devenu mon rituel quotidien.',
-    img: 'https://picsum.photos/seed/testimonial-3/88/88', name: 'Emmanuel Adeyemi', role: 'Ingénieur · Lagos',
+    quote:
+      'Enfin une plateforme qui parle de nos réalités. Les articles sur l’agriculture m’ont beaucoup aidée dans mon exploitation à Bafoussam.',
+    name: 'Marlyse Fotso',
+    role: 'Agricultrice, Bafoussam',
   },
 ];
 
 export function TestimonialsSection() {
   return (
-    <section className="sec-testi spy" aria-labelledby="testi-h2">
-      <div className="container">
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div className="sec-eyebrow" style={{ justifyContent: 'center' }}>Témoignages</div>
-          <h2 className="sec-title" id="testi-h2" style={{ margin: '0 auto', textAlign: 'center' }}>Ce que disent <span className="highlight">nos apprenants</span></h2>
-        </div>
-        <div className="testi-grid">
+    <section className="lv-testi-wrap lv-grad">
+      <div className="lv-container">
+        <h2>Ce que disent nos apprenants</h2>
+        <div className="lv-grid-3 lv-testi-grid">
           {TESTIMONIALS.map((t) => (
-            <div className="tcard" key={t.name}>
-              <div className="tcard-stars">
-                {Array.from({ length: 5 }).map((_, i) => (
-                  <span className="tcard-star" key={i}>★</span>
-                ))}
+            <div className="lv-testi" key={t.name}>
+              <div className="q">&ldquo;</div>
+              <p className="quote">{t.quote}</p>
+              <div className="who">
+                <span className="avatar" aria-hidden="true">
+                  {t.name.charAt(0)}
+                </span>
+                <div>
+                  <div className="n">{t.name}</div>
+                  <div className="r">{t.role}</div>
+                </div>
               </div>
-              <p className="tcard-txt">&quot;{t.quote}&quot;</p>
-              <div className="tcard-author">
-                <img src={t.img} alt={t.name} />
-                <div><div className="tcard-name">{t.name}</div><div className="tcard-role">{t.role}</div></div>
+              <div className="lv-stars" aria-label="5 étoiles sur 5">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <svg key={i} width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
+                    <path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z" />
+                  </svg>
+                ))}
               </div>
             </div>
           ))}

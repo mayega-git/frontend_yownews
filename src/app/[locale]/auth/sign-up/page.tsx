@@ -59,15 +59,17 @@ export default function SignUpPage() {
 
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
+  const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPwd, setShowPwd] = useState(false);
   const [countryCode, setCountryCode] = useState('+237');
   const [phone, setPhone] = useState('');
   const [accountType, setAccountType] = useState<'individual' | 'organization'>('individual');
+  const [orgCode, setOrgCode] = useState('');
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
-  const [fieldErrors, setFieldErrors] = useState<Partial<Record<'firstName' | 'lastName' | 'email' | 'password', string>>>({});
+  const [fieldErrors, setFieldErrors] = useState<Partial<Record<'firstName' | 'lastName' | 'username' | 'email' | 'password', string>>>({});
 
   const pwScore = scorePassword(password);
   const strength = STRENGTH_LABELS[pwScore];
@@ -78,8 +80,11 @@ export default function SignUpPage() {
 
   function validate() {
     const errs: typeof fieldErrors = {};
-    if (!firstName.trim()) errs.firstName = 'Requis';
-    if (!lastName.trim()) errs.lastName = 'Requis';
+    if (accountType === 'individual') {
+      if (!firstName.trim()) errs.firstName = 'Requis';
+      if (!lastName.trim()) errs.lastName = 'Requis';
+      if (!username.trim()) errs.username = 'Requis';
+    }
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) errs.email = 'Adresse email invalide';
     if (password.length < 8) errs.password = 'Minimum 8 caractères';
     return errs;
@@ -94,16 +99,28 @@ export default function SignUpPage() {
     setLoading(true);
     try {
       const phoneNumber = phone.trim() ? `${countryCode}${phone.trim()}` : undefined;
-      await apiFetch('/api/auth/sign-up', {
+      const res = await apiFetch<{ accountMode?: 'individual' | 'organization' }>('/api/auth/sign-up', {
         method: 'POST',
-        body: { firstName: firstName.trim(), lastName: lastName.trim(), email: email.trim().toLowerCase(), password, phoneNumber, accountType },
+        body: {
+          firstName: accountType === 'individual' ? firstName.trim() : 'Représentant',
+          lastName: accountType === 'individual' ? lastName.trim() : 'Organisation',
+          username: accountType === 'individual' ? username.trim() : email.trim().toLowerCase().split('@')[0],
+          email: email.trim().toLowerCase(),
+          password,
+          phoneNumber,
+          accountType,
+          orgCode: accountType === 'organization' ? orgCode.trim() : undefined,
+        },
       });
       await refresh();
-      router.push('/');
+      router.push(res.accountMode === 'organization' ? '/auth/org-onboarding' : '/');
     } catch (err) {
       if (err instanceof BffApiError) {
         if (err.status === 409) {
           setFieldErrors({ email: 'Cette adresse email est déjà utilisée.' });
+        } else if (err.status === 404) {
+          setGlobalError("L'organisation n'existe pas dans KSM. Inscription en tant que particulier requise.");
+          setAccountType('individual');
         } else {
           setGlobalError(err.message || 'Une erreur est survenue. Veuillez réessayer.');
         }
@@ -175,7 +192,7 @@ export default function SignUpPage() {
             <p className="text-sm text-[#64748B]">
               Déjà membre ?{' '}
               <Link href="/auth/login" className="text-[#1565C0] font-semibold hover:text-[#FF6B35] transition-colors">
-                Se connecter →
+                Se connecter
               </Link>
             </p>
           </div>
@@ -209,34 +226,60 @@ export default function SignUpPage() {
 
           <form onSubmit={handleSubmit} noValidate aria-label="Formulaire d'inscription">
 
-            {/* Name row */}
-            <div className="grid grid-cols-2 gap-3 mb-3.5">
-              {[
-                { id: 'firstName', label: 'Prénom', value: firstName, setter: setFirstName, placeholder: 'Kwame', autocomplete: 'given-name' },
-                { id: 'lastName', label: 'Nom', value: lastName, setter: setLastName, placeholder: 'Asante', autocomplete: 'family-name' },
-              ].map(({ id, label, value, setter, placeholder, autocomplete }) => (
-                <div key={id}>
-                  <label htmlFor={id} className="block font-display text-xs font-semibold text-[#0F172A] mb-1.5">{label}</label>
+            {accountType === 'individual' && (
+              <>
+                {/* Name row */}
+                <div className="grid grid-cols-2 gap-3 mb-3.5">
+                  {[
+                    { id: 'firstName', label: 'Prénom', value: firstName, setter: setFirstName, placeholder: 'Kwame', autocomplete: 'given-name' },
+                    { id: 'lastName', label: 'Nom', value: lastName, setter: setLastName, placeholder: 'Asante', autocomplete: 'family-name' },
+                  ].map(({ id, label, value, setter, placeholder, autocomplete }) => (
+                    <div key={id}>
+                      <label htmlFor={id} className="block font-display text-xs font-semibold text-[#0F172A] mb-1.5">{label}</label>
+                      <input
+                        id={id}
+                        type="text"
+                        value={value}
+                        onChange={(e) => { setter(e.target.value); clearErr(id as 'firstName' | 'lastName'); }}
+                        placeholder={placeholder}
+                        autoComplete={autocomplete}
+                        required
+                        className={inputCls(!!fieldErrors[id as 'firstName' | 'lastName'], !fieldErrors[id as 'firstName' | 'lastName'] && value.trim().length > 0)}
+                        style={{ color: '#0F172A' }}
+                      />
+                      {fieldErrors[id as 'firstName' | 'lastName'] && (
+                        <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1">
+                          <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+                          {fieldErrors[id as 'firstName' | 'lastName']}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Username */}
+                <div className="mb-3.5">
+                  <label htmlFor="username" className="block font-display text-xs font-semibold text-[#0F172A] mb-1.5">Nom d&apos;utilisateur</label>
                   <input
-                    id={id}
+                    id="username"
                     type="text"
-                    value={value}
-                    onChange={(e) => { setter(e.target.value); clearErr(id as 'firstName' | 'lastName'); }}
-                    placeholder={placeholder}
-                    autoComplete={autocomplete}
+                    value={username}
+                    onChange={(e) => { setUsername(e.target.value); clearErr('username'); }}
+                    placeholder="kwame_asante"
+                    autoComplete="username"
                     required
-                    className={inputCls(!!fieldErrors[id as 'firstName' | 'lastName'], !fieldErrors[id as 'firstName' | 'lastName'] && value.trim().length > 0)}
+                    className={inputCls(!!fieldErrors.username, !fieldErrors.username && username.trim().length > 0)}
                     style={{ color: '#0F172A' }}
                   />
-                  {fieldErrors[id as 'firstName' | 'lastName'] && (
+                  {fieldErrors.username && (
                     <p className="mt-1 text-[11px] text-red-500 flex items-center gap-1">
                       <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-                      {fieldErrors[id as 'firstName' | 'lastName']}
+                      {fieldErrors.username}
                     </p>
                   )}
                 </div>
-              ))}
-            </div>
+              </>
+            )}
 
             {/* Email */}
             <div className="mb-3.5">
@@ -321,44 +364,46 @@ export default function SignUpPage() {
             </div>
 
             {/* Phone (optional) */}
-            <div className="mb-3.5">
-              <label htmlFor="phone" className="block font-display text-xs font-semibold text-[#0F172A] mb-1.5">
-                Téléphone <span className="text-gray-400 font-normal text-[11px] ml-1">(optionnel)</span>
-              </label>
-              <div className="flex">
-                <select
-                  id="countryCode"
-                  value={countryCode}
-                  onChange={(e) => setCountryCode(e.target.value)}
-                  aria-label="Indicatif pays"
-                  className="px-3 py-[11px] rounded-l-[10px] border-[1.5px] border-r-0 border-gray-200 bg-white text-sm text-[#0F172A] cursor-pointer focus:outline-none focus:border-[#1565C0] flex-shrink-0 min-w-[100px] appearance-none"
-                  style={{
-                    backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
-                    backgroundRepeat: 'no-repeat',
-                    backgroundPosition: 'right 8px center',
-                    paddingRight: '24px',
-                  }}
-                >
-                  {COUNTRY_CODES.map((c) => (
-                    <option key={c.code} value={c.code}>{c.label}</option>
-                  ))}
-                </select>
-                <input
-                  id="phone"
-                  type="tel"
-                  value={phone}
-                  onChange={(e) => setPhone(e.target.value)}
-                  placeholder="07 00 00 00 00"
-                  autoComplete="tel-national"
-                  aria-label="Numéro de téléphone"
-                  className="flex-1 px-3.5 py-[11px] rounded-r-[10px] border-[1.5px] border-l-0 border-gray-200 bg-white text-sm text-[#0F172A] outline-none focus:border-[#1565C0] transition-all"
-                />
+            {accountType === 'individual' && (
+              <div className="mb-3.5">
+                <label htmlFor="phone" className="block font-display text-xs font-semibold text-[#0F172A] mb-1.5">
+                  Téléphone <span className="text-gray-400 font-normal text-[11px] ml-1">(optionnel)</span>
+                </label>
+                <div className="flex">
+                  <select
+                    id="countryCode"
+                    value={countryCode}
+                    onChange={(e) => setCountryCode(e.target.value)}
+                    aria-label="Indicatif pays"
+                    className="px-3 py-[11px] rounded-l-[10px] border-[1.5px] border-r-0 border-gray-200 bg-white text-sm text-[#0F172A] cursor-pointer focus:outline-none focus:border-[#1565C0] flex-shrink-0 min-w-[100px] appearance-none"
+                    style={{
+                      backgroundImage: `url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%2394A3B8' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E")`,
+                      backgroundRepeat: 'no-repeat',
+                      backgroundPosition: 'right 8px center',
+                      paddingRight: '24px',
+                    }}
+                  >
+                    {COUNTRY_CODES.map((c) => (
+                      <option key={c.code} value={c.code}>{c.label}</option>
+                    ))}
+                  </select>
+                  <input
+                    id="phone"
+                    type="tel"
+                    value={phone}
+                    onChange={(e) => setPhone(e.target.value)}
+                    placeholder="07 00 00 00 00"
+                    autoComplete="tel-national"
+                    aria-label="Numéro de téléphone"
+                    className="flex-1 px-3.5 py-[11px] rounded-r-[10px] border-[1.5px] border-l-0 border-gray-200 bg-white text-sm text-[#0F172A] outline-none focus:border-[#1565C0] transition-all"
+                  />
+                </div>
+                <p className="mt-1 text-[11px] text-gray-400 flex items-center gap-1">
+                  <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
+                  Pour recevoir des alertes importantes
+                </p>
               </div>
-              <p className="mt-1 text-[11px] text-gray-400 flex items-center gap-1">
-                <svg width="11" height="11" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01"/></svg>
-                Pour recevoir des alertes importantes
-              </p>
-            </div>
+            )}
 
             {/* Account type */}
             <div className="mb-5">
@@ -436,6 +481,27 @@ export default function SignUpPage() {
                 })}
               </div>
             </div>
+
+            {/* Organization Code (conditional) */}
+            {accountType === 'organization' && (
+              <div className="mb-5">
+                <label htmlFor="orgCode" className="block font-display text-xs font-semibold text-[#0F172A] mb-1.5">
+                  Code de l'organisation
+                </label>
+                <input
+                  id="orgCode"
+                  type="text"
+                  value={orgCode}
+                  onChange={(e) => setOrgCode(e.target.value)}
+                  placeholder="EXEMPLE_ORG"
+                  className={inputCls()}
+                  style={{ color: '#0F172A' }}
+                />
+                <p className="mt-1.5 text-[11px] text-gray-400 leading-relaxed">
+                  Si cette organisation est déjà créée dans KSM, entrez son code pour vous y rattacher. Sinon, laissez vide pour créer un compte classique.
+                </p>
+              </div>
+            )}
 
             {/* Submit */}
             <button

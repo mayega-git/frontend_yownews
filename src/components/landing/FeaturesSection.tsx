@@ -1,52 +1,55 @@
-type Feature = { icon: React.ReactNode; title: string; desc: string };
+import type { ReactNode } from 'react';
 
-const FEATURES: Feature[] = [
+const svg = (d: ReactNode) => (
+  <svg width="26" height="26" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+    {d}
+  </svg>
+);
+
+const FEATURES: { ic: ReactNode; title: string; desc: string }[] = [
   {
-    icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 20h9M16.5 3.5a2.121 2.121 0 013 3L7 19l-4 1 1-4L16.5 3.5z" /></svg>,
-    title: 'Articles par des experts africains',
-    desc: "Des centaines d'articles rédigés par des professionnels du continent, accessibles gratuitement.",
+    ic: svg(<><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="6" /><circle cx="12" cy="12" r="2" /></>),
+    title: 'Contenus adaptés au Cameroun',
+    desc: 'Des articles, cours et podcasts ancrés dans les réalités locales, de Douala à Yaoundé, de Bamenda à Garoua.',
   },
   {
-    icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" /><circle cx="12" cy="12" r="3" /><path d="M12 2v3M12 19v3M2 12h3M19 12h3" /></svg>,
-    title: 'Podcasts en français & langues locales',
-    desc: 'Du français au swahili — apprenez dans la langue qui vous parle le plus.',
+    ic: svg(<><line x1="12" y1="1" x2="12" y2="23" /><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6" /></>),
+    title: '100% gratuit',
+    desc: 'Aucun abonnement, aucun frais caché. Tout le savoir est accessible librement, où que vous soyez.',
   },
   {
-    icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 2L2 7l10 5 10-5-10-5M2 17l10 5 10-5M2 12l10 5 10-5" /></svg>,
-    title: 'Cours adaptés aux réalités locales',
-    desc: "Des formations qui prennent en compte les marchés et opportunités spécifiques à l'Afrique.",
+    ic: svg(<><rect x="5" y="2" width="14" height="20" rx="2" /><line x1="12" y1="18" x2="12" y2="18" /></>),
+    title: 'Accessible partout',
+    desc: 'Optimisé pour les connexions mobiles. Apprenez depuis votre téléphone, même avec un forfait data léger.',
   },
   {
-    icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4 4v2M9 11a4 4 0 100-8 4 4 0 000 8zM23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75" /></svg>,
-    title: 'Communauté panafricaine',
-    desc: 'De Lagos à Casablanca, de Dakar à Nairobi — un réseau pour grandir ensemble.',
+    ic: svg(<><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" /></>),
+    title: 'Voix locales',
+    desc: 'Des experts, entrepreneurs et enseignants camerounais partagent leur savoir et leur expérience.',
   },
   {
-    icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" /><path d="M22 6l-10 7L2 6" /></svg>,
-    title: 'Newsletter hebdo africaine',
-    desc: 'Chaque semaine, la sélection des meilleures innovations et opportunités du continent.',
+    ic: svg(<><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20" /><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z" /></>),
+    title: 'Cours structurés',
+    desc: 'Des parcours organisés en unités, du débutant à l’avancé, pour progresser à votre rythme.',
   },
   {
-    icon: <svg width="22" height="22" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" /></svg>,
-    title: '100% Gratuit, toujours',
-    desc: 'Apprenez sans limites, sans abonnement caché, sans engagement. La connaissance est un droit.',
+    ic: svg(<><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2" /><circle cx="9" cy="7" r="4" /><path d="M23 21v-2a4 4 0 0 0-3-3.87M16 3.13a4 4 0 0 1 0 7.75" /></>),
+    title: 'Une communauté',
+    desc: 'Forums, newsletters et profils d’auteurs : échangez et suivez celles et ceux qui vous inspirent.',
   },
 ];
 
 export function FeaturesSection() {
   return (
-    <section className="sec-feats spy" aria-labelledby="feats-h2">
-      <div className="container">
-        <div style={{ textAlign: 'center', marginBottom: 48 }}>
-          <div className="sec-eyebrow" style={{ justifyContent: 'center' }}>Pourquoi YowNews ?</div>
-          <h2 className="sec-title" id="feats-h2" style={{ margin: '0 auto', textAlign: 'center' }}>Conçu pour les <span className="highlight">talents africains</span></h2>
-        </div>
-        <div className="feats-grid">
+    <section id="features" className="lv-features">
+      <div className="lv-container">
+        <h2>Tout ce dont vous avez besoin pour apprendre</h2>
+        <div className="lv-grid-feat">
           {FEATURES.map((f) => (
-            <div className="feat-card" key={f.title}>
-              <div className="feat-icon">{f.icon}</div>
-              <div className="feat-title">{f.title}</div>
-              <p className="feat-desc">{f.desc}</p>
+            <div className="lv-feat" key={f.title}>
+              <div className="lv-feat-ic">{f.ic}</div>
+              <h3>{f.title}</h3>
+              <p>{f.desc}</p>
             </div>
           ))}
         </div>

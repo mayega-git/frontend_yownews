@@ -1,7 +1,7 @@
 import { redirect } from 'next/navigation';
 import { readSession } from '@/server/session';
 import { SessionProvider } from '@/components/providers/session-provider';
-import { isPlatformAdmin } from '@/lib/roles';
+import { isPlatformAdmin, roleBadgeLabel, roleVariant } from '@/lib/roles';
 import AdminSidebar from './_components/AdminSidebar';
 import AdminTopbar from './_components/AdminTopbar';
 import type { ClientSession } from '@/lib/types/auth';
@@ -19,12 +19,12 @@ export default async function AdminLayout({ children }: { children: React.ReactN
   };
 
   const displayName =
-    [session.user.firstName, session.user.lastName].filter(Boolean).join(' ') || session.user.email;
+    [session.user.firstName, session.user.lastName].filter(Boolean).join(' ') || session.user.username || session.user.email;
 
   return (
     <SessionProvider initialSession={clientSession}>
       <div style={{ display: 'flex', minHeight: '100vh', background: 'var(--gray-50)', overflow: 'hidden' }}>
-        <AdminSidebar displayName={displayName} email={session.user.email} />
+        <AdminSidebar displayName={displayName} email={session.user.email} variant={roleVariant(session.user.permissions ?? session.user.roles)} roleBadge={roleBadgeLabel(session.user.permissions ?? session.user.roles)} />
         <div
           style={{ marginLeft: 'var(--sb-w, 260px)', flex: 1, display: 'flex', flexDirection: 'column', minHeight: '100vh', overflowY: 'auto', transition: 'margin-left .3s ease' }}
           className="admin-main"

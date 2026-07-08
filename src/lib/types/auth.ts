@@ -1,6 +1,7 @@
 export interface SessionUser {
   id: string;
   email: string;
+  username?: string;
   firstName?: string;
   lastName?: string;
   roles: string[];
@@ -11,6 +12,8 @@ export interface SessionUser {
 export interface WorkspaceContext {
   tenantId: string;
   organizationId?: string;
+  organizationCode?: string;
+  organizationName?: string;
   agencyId?: string;
 }
 

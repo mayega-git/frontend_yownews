@@ -112,13 +112,21 @@ export default function ContentEditor(
     setAudioFile(file);
   };
 
+  const sortedCategories = [...categories]
+    .filter((c) => c.name !== 'NONE')
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+
   const catOptions: Option[] = [
-    ...categories.filter((c) => c.name !== 'NONE').map((c) => ({ value: c.name, label: c.name })),
     { value: SENTINEL, label: 'Aucune — saisir mes catégories' },
+    ...sortedCategories.map((c) => ({ value: c.name, label: c.name })),
   ];
+
+  const sortedTags = [...curatedTags]
+    .sort((a, b) => a.name.localeCompare(b.name, 'fr'));
+
   const tagOptions: Option[] = [
-    ...curatedTags.map((t) => ({ value: t.name, label: t.name })),
     { value: SENTINEL, label: 'Aucun — saisir mes tags' },
+    ...sortedTags.map((t) => ({ value: t.name, label: t.name })),
   ];
   const showFreeCats = selectedCats.includes(SENTINEL);
   const showFreeTags = selectedTags.includes(SENTINEL);

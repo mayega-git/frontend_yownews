@@ -1,29 +1,60 @@
 'use client';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 
 export type MenuItem = { label: string; onClick: () => void; danger?: boolean };
 
 // Menu d'actions « ⋮ » par ligne de table — partagé entre l'espace Rédacteur et la gestion admin.
+// Le dropdown est rendu dans un portal (position fixed) pour ne pas être rogné par un
+// conteneur parent en `overflow: hidden` (cas des tables aux coins arrondis).
 export default function RowMenu({ items, disabled }: { items: MenuItem[]; disabled?: boolean }) {
   const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
+  const [pos, setPos] = useState<{ top: number; right: number } | null>(null);
+  const btnRef = useRef<HTMLButtonElement>(null);
+  const menuRef = useRef<HTMLDivElement>(null);
+
+  const place = () => {
+    const btn = btnRef.current;
+    if (!btn) return;
+    const r = btn.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom;
+    // Repli au-dessus si peu de place en bas (menu ~ items*36 + 8).
+    const estHeight = items.length * 38 + 8;
+    const top = spaceBelow < estHeight && r.top > estHeight ? r.top - estHeight - 4 : r.bottom + 4;
+    setPos({ top, right: Math.max(8, window.innerWidth - r.right) });
+  };
+
+  useLayoutEffect(() => { if (open) place(); }, [open]);
+
   useEffect(() => {
     if (!open) return;
-    const onClick = (e: MouseEvent) => { if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false); };
-    document.addEventListener('mousedown', onClick);
-    return () => document.removeEventListener('mousedown', onClick);
+    const onDocClick = (e: MouseEvent) => {
+      const t = e.target as Node;
+      if (btnRef.current?.contains(t) || menuRef.current?.contains(t)) return;
+      setOpen(false);
+    };
+    const onReposition = () => setOpen(false);
+    document.addEventListener('mousedown', onDocClick);
+    window.addEventListener('scroll', onReposition, true);
+    window.addEventListener('resize', onReposition);
+    return () => {
+      document.removeEventListener('mousedown', onDocClick);
+      window.removeEventListener('scroll', onReposition, true);
+      window.removeEventListener('resize', onReposition);
+    };
   }, [open]);
+
   return (
-    <div ref={ref} style={{ position: 'relative', display: 'inline-block' }}>
-      <button type="button" disabled={disabled} onClick={() => setOpen((o) => !o)} aria-label="Actions" style={{
+    <>
+      <button ref={btnRef} type="button" disabled={disabled} onClick={() => setOpen((o) => !o)} aria-label="Actions" style={{
         border: 'none', background: 'none', cursor: disabled ? 'default' : 'pointer', fontSize: '20px',
         lineHeight: 1, padding: '4px 10px', color: 'var(--gray-500, #6b7280)', borderRadius: '6px',
       }}>⋮</button>
-      {open && (
-        <div style={{
-          position: 'absolute', right: 0, top: 'calc(100% + 4px)', zIndex: 60, background: '#fff',
+      {open && pos && createPortal(
+        <div ref={menuRef} style={{
+          position: 'fixed', top: pos.top, right: pos.right, zIndex: 1000, background: '#fff',
           border: '1px solid var(--gray-200, #e5e7eb)', borderRadius: '10px', boxShadow: '0 8px 24px rgba(0,0,0,.12)',
-          minWidth: '170px', overflow: 'hidden',
+          minWidth: '180px', overflow: 'hidden',
         }}>
           {items.map((it) => (
             <button key={it.label} type="button" onClick={() => { setOpen(false); it.onClick(); }} style={{
@@ -34,8 +65,9 @@ export default function RowMenu({ items, disabled }: { items: MenuItem[]; disabl
               onMouseLeave={(e) => { (e.currentTarget as HTMLElement).style.background = 'none'; }}
             >{it.label}</button>
           ))}
-        </div>
+        </div>,
+        document.body,
       )}
-    </div>
+    </>
   );
 }

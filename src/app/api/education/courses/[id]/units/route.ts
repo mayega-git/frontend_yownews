@@ -2,12 +2,16 @@ import 'server-only';
 import type { NextRequest } from 'next/server';
 import { handleRoute, fail } from '@/server/api-response';
 import { readSession } from '@/server/session';
+import { getAdminSession } from '@/server/ksm/admin-session';
 import { isEducationEditor, isPlatformAdmin } from '@/lib/roles';
 import * as educationApi from '@/server/ksm/modules/education';
 
 export async function GET(_request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   return handleRoute(async () => {
-    const session = await readSession();
+    let session = await readSession();
+    if (!session) {
+      session = await getAdminSession();
+    }
     if (!session) return fail(401, 'UNAUTHORIZED', 'Not authenticated');
     const { id } = await params;
     return educationApi.listCourseUnits(session, id);

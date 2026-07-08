@@ -1,13 +1,15 @@
 import 'server-only';
 import { handleRoute, fail } from '@/server/api-response';
 import { readSession } from '@/server/session';
-import * as newsletterApi from '@/server/ksm/modules/newsletter';
+import { getPublicProfile } from '@/server/ksm/modules/education';
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ id: string }> }) {
   return handleRoute(async () => {
     const session = await readSession();
     if (!session) return fail(401, 'UNAUTHORIZED', 'Not authenticated');
+
     const { id } = await params;
-    return newsletterApi.publishNewsletter(session, id);
+    const profile = await getPublicProfile(session, id);
+    return profile;
   });
 }

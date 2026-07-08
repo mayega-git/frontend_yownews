@@ -112,6 +112,7 @@ export type SignUpInput = {
   contextId: string;
   firstName: string;
   lastName: string;
+  username: string;
   email: string;
   password: string;
   phoneNumber?: string;

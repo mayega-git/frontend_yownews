@@ -4,11 +4,12 @@ import { apiFetch } from '@/lib/api-client';
 import { useAppRouter } from '@/components/ui/app-link';
 
 type ForumPost = {
-  postId: string; title: string; content: string; authorId: string;
+  postId: string; title: string; content: string; authorId: string; authorName?: string | null;
   numberOfLikes?: number | null; numberOfDislikes?: number | null;
-  postLikes?: string[] | null; commentCount?: number | null; creationDate?: string | null;
+  postLikes?: string[] | null; postDislikes?: string[] | null;
+  commentCount?: number | null; creationDate?: string | null;
 };
-type ForumCommentaire = { commentaireId?: string | null; contenu: string; auteurId: string; createdAt?: string | null };
+type ForumCommentaire = { commentaireId?: string | null; content: string; authorId: string; authorName?: string | null; creationDate?: string | null };
 type ForumCategorie = { categorieId: string; categorieName: string };
 
 function formatDate(s?: string | null) {
@@ -23,6 +24,8 @@ function PostThread({ post, userId, onDelete }: { post: ForumPost; userId?: stri
   const [busy, setBusy] = useState(false);
   const [liked, setLiked] = useState(post.postLikes?.includes(userId ?? '') ?? false);
   const [likes, setLikes] = useState(post.numberOfLikes ?? 0);
+  const [disliked, setDisliked] = useState(post.postDislikes?.includes(userId ?? '') ?? false);
+  const [dislikes, setDislikes] = useState(post.numberOfDislikes ?? 0);
 
   const loadComments = async () => {
     if (open) { setOpen(false); return; }
@@ -37,7 +40,15 @@ function PostThread({ post, userId, onDelete }: { post: ForumPost; userId?: stri
     try {
       await apiFetch(`/api/forum/posts/${post.postId}/like`, { method: 'POST' });
       if (liked) { setLikes((n) => n - 1); setLiked(false); }
-      else { setLikes((n) => n + 1); setLiked(true); }
+      else { setLikes((n) => n + 1); setLiked(true); if (disliked) { setDislikes((n) => n - 1); setDisliked(false); } }
+    } catch { /* best-effort */ }
+  };
+
+  const toggleDislike = async () => {
+    try {
+      await apiFetch(`/api/forum/posts/${post.postId}/dislike`, { method: 'POST' });
+      if (disliked) { setDislikes((n) => n - 1); setDisliked(false); }
+      else { setDislikes((n) => n + 1); setDisliked(true); if (liked) { setLikes((n) => n - 1); setLiked(false); } }
     } catch { /* best-effort */ }
   };
 
@@ -45,7 +56,7 @@ function PostThread({ post, userId, onDelete }: { post: ForumPost; userId?: stri
     if (!draft.trim() || busy) return;
     setBusy(true);
     try {
-      const created = await apiFetch<ForumCommentaire>(`/api/forum/commentaires/post/${post.postId}`, { method: 'POST', body: { contenu: draft.trim() } });
+      const created = await apiFetch<ForumCommentaire>(`/api/forum/commentaires/post/${post.postId}`, { method: 'POST', body: { content: draft.trim() } });
       setComments((prev) => [...prev, created]);
       setDraft('');
     } catch { /* best-effort */ }
@@ -61,12 +72,17 @@ function PostThread({ post, userId, onDelete }: { post: ForumPost; userId?: stri
     <div style={{ background: '#fff', border: '1px solid var(--gray-200)', borderRadius: '12px', padding: '18px 20px', marginBottom: '10px' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '12px' }}>
         <div style={{ flex: 1, minWidth: 0 }}>
-          <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '6px' }}>{post.title}</div>
+          <div style={{ fontWeight: 700, fontSize: '15px', marginBottom: '2px' }}>{post.title}</div>
+          <div style={{ fontSize: '12px', color: 'var(--gray-500)', marginBottom: '6px' }}>Par {post.authorName || 'Utilisateur'}</div>
           <div style={{ fontSize: '14px', color: 'var(--gray-700)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{post.content}</div>
           <div style={{ display: 'flex', gap: '14px', marginTop: '10px', alignItems: 'center' }}>
             <button type="button" onClick={toggleLike} style={{ border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color: liked ? 'var(--accent)' : 'var(--gray-500)' }}>
               <svg width="14" height="14" fill={liked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/></svg>
               {likes}
+            </button>
+            <button type="button" onClick={toggleDislike} style={{ border: 'none', background: 'none', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: '4px', fontSize: '12px', fontWeight: 600, color: disliked ? 'var(--accent)' : 'var(--gray-500)' }}>
+              <svg width="14" height="14" fill={disliked ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24" style={{ transform: 'rotate(180deg)' }}><path d="M14 9V5a3 3 0 00-3-3l-4 9v11h11.28a2 2 0 002-1.7l1.38-9a2 2 0 00-2-2.3H14z"/></svg>
+              {dislikes}
             </button>
             <button type="button" onClick={loadComments} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '12px', color: 'var(--gray-500)', fontWeight: 600 }}>
               {open ? 'Masquer' : `Commentaires (${post.commentCount ?? 0})`}
@@ -82,11 +98,14 @@ function PostThread({ post, userId, onDelete }: { post: ForumPost; userId?: stri
       {open && (
         <div style={{ marginTop: '14px', paddingTop: '14px', borderTop: '1px solid var(--gray-100)' }}>
           {comments.map((c) => (
-            <div key={c.commentaireId ?? c.createdAt} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '8px 0', borderBottom: '1px solid var(--gray-50)' }}>
-              <div style={{ fontSize: '13px', color: 'var(--gray-700)' }}>{c.contenu}</div>
+            <div key={c.commentaireId ?? c.creationDate} style={{ display: 'flex', justifyContent: 'space-between', gap: '8px', padding: '8px 0', borderBottom: '1px solid var(--gray-50)' }}>
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: '12px', fontWeight: 600, color: 'var(--gray-600)', marginBottom: '2px' }}>{c.authorName || 'Utilisateur'}</div>
+                <div style={{ fontSize: '13px', color: 'var(--gray-700)' }}>{c.content}</div>
+              </div>
               <div style={{ display: 'flex', gap: '8px', alignItems: 'center', flexShrink: 0 }}>
-                <span style={{ fontSize: '11px', color: 'var(--gray-400)' }}>{formatDate(c.createdAt)}</span>
-                {(c.auteurId === userId) && (
+                <span style={{ fontSize: '11px', color: 'var(--gray-400)' }}>{formatDate(c.creationDate)}</span>
+                {(c.authorId === userId) && (
                   <button type="button" onClick={() => deleteComment(c.commentaireId!)} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: '11px', color: 'var(--accent)' }}>Supprimer</button>
                 )}
               </div>
@@ -107,8 +126,9 @@ function PostThread({ post, userId, onDelete }: { post: ForumPost; userId?: stri
   );
 }
 
-export default function ForumGroupView({ groupId }: { groupId: string }) {
+export default function ForumGroupView({ groupId, userId }: { groupId: string; userId?: string }) {
   const router = useAppRouter();
+  const [group, setGroup] = useState<{ groupId: string; name: string; description?: string | null } | null>(null);
   const [posts, setPosts] = useState<ForumPost[]>([]);
   const [categories, setCategories] = useState<ForumCategorie[]>([]);
   const [loading, setLoading] = useState(true);
@@ -120,9 +140,11 @@ export default function ForumGroupView({ groupId }: { groupId: string }) {
 
   useEffect(() => {
     Promise.all([
+      apiFetch<any>(`/api/forum/groups/${groupId}`).catch(() => null),
       apiFetch<ForumPost[]>(`/api/forum/posts/group/${groupId}`).catch(() => []),
       apiFetch<ForumCategorie[]>(`/api/forum/categories/group/${groupId}`).catch(() => []),
-    ]).then(([p, c]) => {
+    ]).then(([g, p, c]) => {
+      setGroup(g);
       setPosts(Array.isArray(p) ? p : []);
       setCategories(Array.isArray(c) ? c : []);
       setLoading(false);
@@ -149,7 +171,7 @@ export default function ForumGroupView({ groupId }: { groupId: string }) {
     <div style={{ maxWidth: '800px', margin: '0 auto', padding: '32px 16px' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '20px' }}>
         <button type="button" onClick={() => router.back()} style={{ border: '1px solid var(--gray-200)', borderRadius: '8px', padding: '6px 12px', background: '#fff', cursor: 'pointer', fontSize: '13px', fontWeight: 600 }}>← Retour</button>
-        <h1 style={{ fontFamily: 'var(--font-d)', fontSize: '22px', fontWeight: 800, margin: 0, flex: 1 }}>Fil de discussion</h1>
+        <h1 style={{ fontFamily: 'var(--font-d)', fontSize: '22px', fontWeight: 800, margin: 0, flex: 1 }}>{group?.name ?? 'Fil de discussion'}</h1>
         <button type="button" onClick={() => setShowForm((v) => !v)} style={{ border: 'none', borderRadius: '8px', padding: '8px 16px', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: 'pointer' }}>
           {showForm ? 'Annuler' : '+ Nouveau post'}
         </button>
@@ -184,7 +206,7 @@ export default function ForumGroupView({ groupId }: { groupId: string }) {
       ) : posts.length === 0 ? (
         <p style={{ color: 'var(--gray-400)', fontSize: '13px', textAlign: 'center', padding: '30px' }}>Aucun post dans ce groupe.</p>
       ) : (
-        posts.map((p) => <PostThread key={p.postId} post={p} onDelete={deletePost} />)
+        posts.map((p) => <PostThread key={p.postId} post={p} userId={userId} onDelete={deletePost} />)
       )}
     </div>
   );

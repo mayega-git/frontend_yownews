@@ -7,12 +7,16 @@ import { callKsm } from '@/server/ksm/client';
 // donc on appelle callKsm en `raw` puis on parse/valide la réponse nous-mêmes.
 
 export type RedacteurStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+// Statut d'une PUBLICATION (newsletter_entity) : gate admin qui révèle la rédaction.
+export type NewsletterStatus = 'PENDING' | 'APPROVED' | 'REJECTED';
+// Statut d'un CONTENU (newsletter_content_entity) : cycle de rédaction/modération.
 export type StatutNewsletter = 'DRAFT' | 'SUBMITTED' | 'APPROVED' | 'REJECTED' | 'PUBLISHED';
 
 export type CategorieEntity = { id: string; nom: string; description?: string | null };
 
 export type RedacteurRequestEntity = {
   id: string;
+  userId: string;
   email: string;
   nom: string;
   prenom: string;
@@ -22,13 +26,28 @@ export type RedacteurRequestEntity = {
   rejectionReason?: string | null;
 };
 
+// Une PUBLICATION newsletter (canal) : titre + description + catégories, validée par l'admin.
 export type NewsletterEntity = {
   id: string;
   titre: string;
+  description?: string | null;
+  authorId: string;
+  statut: NewsletterStatus;
+  coverId?: string | null;
+  categories?: CategorieEntity[] | null;
+  createdAt?: string | null;
+};
+
+// Un CONTENU rattaché à une publication.
+export type NewsletterContentEntity = {
+  id: string;
+  newsletterId: string;
+  newsletterTitre?: string | null;
+  titre: string;
   contenu: string;
   statut: StatutNewsletter;
-  userId: string;
-  redacteurNom?: string | null;
+  coverId?: string | null;
+  authorId: string;
   categories?: CategorieEntity[] | null;
   createdAt?: string | null;
   publishedAt?: string | null;
@@ -71,7 +90,7 @@ export async function deleteCategory(session: AppSession, id: string) {
 
 // ── Demande de création de newsletter (= demande rédacteur) ──
 export async function createRedacteurRequest(session: AppSession, userId: string, body: {
-  nom: string; prenom: string; email: string; categories: { nom: string; isCustom: boolean }[];
+  nom: string; prenom: string; email: string;
 }) {
   const res = await callKsm<Response>(
     `/api/v1/newsletter/redacteurs?userId=${userId}`,
@@ -105,6 +124,12 @@ export async function listPendingRedacteurRequests(session: AppSession) {
   return readRaw<RedacteurRequestEntity[]>(res);
 }
 
+export async function listRedacteurRequestsByStatus(session: AppSession, status?: string) {
+  const qs = status ? `?status=${status}` : '';
+  const res = await callKsm<Response>(`/api/v1/newsletter/admin/redacteurs/requests${qs}`, { method: 'GET', raw: true }, { session });
+  return readRaw<RedacteurRequestEntity[]>(res);
+}
+
 export async function approveRedacteurRequest(session: AppSession, id: string) {
   const res = await callKsm<Response>(
     `/api/v1/newsletter/admin/redacteurs/requests/${id}/approve`,
@@ -123,40 +148,101 @@ export async function rejectRedacteurRequest(session: AppSession, id: string, re
   return readRaw<RedacteurRequestEntity>(res);
 }
 
-// ── Contenu newsletter (rédaction) ──
-export async function createNewsletter(session: AppSession, userId: string, body: { titre: string; contenu: string; categorieIds: string[] }) {
+// ── Publications newsletter (canal) ──
+// Le rédacteur approuvé crée d'abord une PUBLICATION (titre + description + catégories),
+// que l'admin valide, ce qui révèle ensuite l'espace de rédaction de contenus.
+export async function createNewsletter(session: AppSession, userId: string, body: { titre: string; description?: string; authorNom?: string; authorPrenom?: string; categorieIds: string[] }) {
   const res = await callKsm<Response>(`/api/v1/newsletter/newsletters?userId=${userId}`, { method: 'POST', body, raw: true }, { session });
   return readRaw<NewsletterEntity>(res);
 }
 
-export async function submitNewsletter(session: AppSession, id: string, userId: string) {
-  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${id}/submit?userId=${userId}`, { method: 'POST', raw: true }, { session });
+export async function updateNewsletter(session: AppSession, id: string, userId: string, body: { titre?: string; description?: string; categorieIds?: string[] }) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${id}?userId=${userId}`, { method: 'PUT', body, raw: true }, { session });
   return readRaw<NewsletterEntity>(res);
 }
 
 export async function listMyNewsletters(session: AppSession, userId: string) {
-  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/author/${userId}`, { method: 'GET', raw: true }, { session });
+  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/mine?userId=${userId}`, { method: 'GET', raw: true }, { session });
   return readRaw<NewsletterEntity[]>(res);
 }
 
-export async function listNewslettersByStatut(session: AppSession, statut: StatutNewsletter) {
-  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters?statut=${statut}`, { method: 'GET', raw: true }, { session });
+export async function getNewsletter(session: AppSession, id: string) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${id}`, { method: 'GET', raw: true }, { session });
+  return readRaw<NewsletterEntity>(res);
+}
+
+// ── Modération admin des publications ──
+export async function listNewslettersByStatus(session: AppSession, status?: NewsletterStatus) {
+  const qs = status ? `?status=${status}` : '';
+  const res = await callKsm<Response>(`/api/v1/newsletter/admin/newsletters${qs}`, { method: 'GET', raw: true }, { session });
   return readRaw<NewsletterEntity[]>(res);
 }
 
-export async function validateNewsletter(session: AppSession, id: string) {
-  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${id}/validate`, { method: 'POST', raw: true }, { session });
+export async function approveNewsletter(session: AppSession, id: string) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/admin/newsletters/${id}/approve`, { method: 'POST', raw: true }, { session });
   return readRaw<NewsletterEntity>(res);
 }
 
 export async function rejectNewsletter(session: AppSession, id: string) {
-  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${id}/reject`, { method: 'POST', raw: true }, { session });
+  const res = await callKsm<Response>(`/api/v1/newsletter/admin/newsletters/${id}/reject`, { method: 'POST', raw: true }, { session });
   return readRaw<NewsletterEntity>(res);
 }
 
-export async function publishNewsletter(session: AppSession, id: string) {
-  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${id}/publish`, { method: 'POST', raw: true }, { session });
-  return readRaw<NewsletterEntity>(res);
+export async function deleteNewsletter(session: AppSession, id: string) {
+  await callKsm<Response>(`/api/v1/newsletter/admin/newsletters/${id}`, { method: 'DELETE', raw: true }, { session });
+}
+
+// ── Contenus d'une publication (rédaction) ──
+export async function createContent(session: AppSession, newsletterId: string, userId: string, body: { titre: string; contenu?: string }) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${newsletterId}/contents?userId=${userId}`, { method: 'POST', body, raw: true }, { session });
+  return readRaw<NewsletterContentEntity>(res);
+}
+
+export async function listContents(session: AppSession, newsletterId: string) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/newsletters/${newsletterId}/contents`, { method: 'GET', raw: true }, { session });
+  return readRaw<NewsletterContentEntity[]>(res);
+}
+
+export async function updateContent(session: AppSession, id: string, userId: string, body: { titre?: string; contenu?: string }) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/contents/${id}?userId=${userId}`, { method: 'PUT', body, raw: true }, { session });
+  return readRaw<NewsletterContentEntity>(res);
+}
+
+export async function submitContent(session: AppSession, id: string, userId: string) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/contents/${id}/submit?userId=${userId}`, { method: 'POST', raw: true }, { session });
+  return readRaw<NewsletterContentEntity>(res);
+}
+
+export async function listContentsByStatut(session: AppSession, statut: StatutNewsletter) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/contents?statut=${statut}`, { method: 'GET', raw: true }, { session });
+  return readRaw<NewsletterContentEntity[]>(res);
+}
+
+export async function publishContent(session: AppSession, id: string, userId: string) {
+  const res = await callKsm<Response>(`/api/v1/newsletter/contents/${id}/publish?userId=${userId}`, { method: 'POST', raw: true }, { session });
+  return readRaw<NewsletterContentEntity>(res);
+}
+
+export async function deleteContent(session: AppSession, id: string) {
+  await callKsm<Response>(`/api/v1/newsletter/contents/${id}`, { method: 'DELETE', raw: true }, { session });
+}
+
+export async function uploadContentCover(session: AppSession, id: string, formData: FormData) {
+  const res = await callKsm<Response>(
+    `/api/v1/newsletter/contents/${id}/cover`,
+    { method: 'POST', body: formData, raw: true },
+    { session },
+  );
+  return readRaw<NewsletterContentEntity>(res);
+}
+
+// Renvoie la réponse brute (flux binaire) de la cover d'un contenu, pour streaming direct côté route BFF.
+export function getContentCover(session: AppSession, id: string) {
+  return callKsm<Response>(
+    `/api/v1/newsletter/contents/${id}/cover`,
+    { method: 'GET', raw: true },
+    { session },
+  );
 }
 
 // ── Abonnements lecteur (catégories) ──

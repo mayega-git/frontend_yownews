@@ -25,6 +25,28 @@ export function isEducationEditor(authorities?: string[]): boolean {
   return hasRole(authorities, EDITOR_ROLE);
 }
 
+/**
+ * Libellé du badge de rôle affiché dans la sidebar, dérivé des autorités de la SESSION
+ * (et non du variant du layout) : un admin reste « Administrateur » même sur /reader/*.
+ */
+export type RoleVariant = 'admin' | 'editor' | 'reader';
+
+/**
+ * Variant d'interface (sidebar) dérivé des autorités de la SESSION, pas de l'URL visitée :
+ * un admin garde son menu admin même en consultant /reader/* ou /editor/*.
+ */
+export function roleVariant(authorities?: string[]): RoleVariant {
+  if (isPlatformAdmin(authorities)) return 'admin';
+  if (isEducationEditor(authorities)) return 'editor';
+  return 'reader';
+}
+
+/** Libellé du badge de rôle, cohérent avec roleVariant. */
+export function roleBadgeLabel(authorities?: string[]): string {
+  const labels: Record<RoleVariant, string> = { admin: 'Administrateur', editor: 'Rédacteur', reader: 'Lecteur' };
+  return labels[roleVariant(authorities)];
+}
+
 export function roleSlug(roles?: string[], _permissions?: string[]): string {
   return roles?.[0]?.toLowerCase() ?? '';
 }

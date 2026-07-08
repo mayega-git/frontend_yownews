@@ -3,7 +3,7 @@ import type { NextRequest } from 'next/server';
 import { handleRoute, fail } from '@/server/api-response';
 import * as authApi from '@/server/ksm/modules/auth';
 import { writeSession } from '@/server/session';
-import type { AppSession } from '@/lib/types/auth';
+import { buildSession, orgDisplayName, savePendingLogin } from '@/server/login-pending';
 
 export async function POST(request: NextRequest) {
   return handleRoute(async () => {
@@ -22,13 +22,30 @@ export async function POST(request: NextRequest) {
     }
 
     const ctx = discovery.contexts[0];
-    const orgId = ctx.organizations[0]?.organizationId ?? undefined;
+    const orgs = ctx.organizations ?? [];
 
-    const contextual = await authApi.selectContext(
-      discovery.selectionToken,
-      ctx.contextId,
-      orgId,
-    );
+    // Plusieurs organisations : étape « Choisir votre organisation » côté client.
+    // Le selectionToken KSM reste en Redis ; seul un pendingId opaque sort.
+    if (orgs.length > 1) {
+      const pendingId = await savePendingLogin(
+        { selectionToken: discovery.selectionToken, contextId: ctx.contextId, organizations: orgs },
+        discovery.expiresInSeconds,
+      );
+      return {
+        requiresOrgSelection: true as const,
+        pendingId,
+        organizations: orgs.map((o) => ({
+          organizationId: o.organizationId,
+          organizationCode: o.organizationCode,
+          displayName: orgDisplayName(o),
+        })),
+      };
+    }
+
+    // 0 org (lecteur / staff plateforme) : fallback org plateforme inchangé.
+    // 1 org : auto-sélection, validée nativement par KSM (validateOrganizationAccess).
+    const orgId = orgs[0]?.organizationId ?? undefined;
+    const contextual = await authApi.selectContext(discovery.selectionToken, ctx.contextId, orgId);
 
     const session = buildSession(contextual);
     await writeSession(session);
@@ -39,29 +56,4 @@ export async function POST(request: NextRequest) {
       forcePasswordChange: session.forcePasswordChange ?? false,
     };
   });
-}
-
-function buildSession(contextual: authApi.ContextualLoginResponse): AppSession {
-  const s = contextual.session;
-  return {
-    sid: crypto.randomUUID(),
-    accessToken: s.accessToken,
-    expiresAt: Math.floor(Date.now() / 1000) + s.expiresInSeconds,
-    forcePasswordChange: s.forcePasswordChange,
-    user: {
-      id: s.id,
-      tenantId: contextual.selectedTenantId,
-      email: s.email,
-      firstName: s.firstName ?? undefined,
-      lastName: s.lastName ?? undefined,
-      roles: s.authorities,
-      permissions: s.authorities,
-    },
-    workspace: {
-      tenantId: contextual.selectedTenantId,
-      ...(contextual.selectedOrganizationId
-        ? { organizationId: contextual.selectedOrganizationId }
-        : {}),
-    },
-  };
 }

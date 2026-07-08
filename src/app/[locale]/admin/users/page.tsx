@@ -124,7 +124,7 @@ export default function UsersPage() {
       if (!user.roles.some((r) => r.code === targetCode)) {
         await apiFetch(`/api/admin/users/${user.userId}/roles`, { method: 'POST', body: { roleId: targetRole.id } });
       }
-      showToast(`${displayName(user)} → ${target === 'editor' ? 'Rédacteur' : 'Lecteur'}`);
+      showToast(`${displayName(user)} : ${target === 'editor' ? 'Rédacteur' : 'Lecteur'}`);
       await fetchData();
     } catch (e) {
       showToast(e instanceof Error ? e.message : 'Échec du changement de rôle');

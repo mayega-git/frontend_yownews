@@ -21,8 +21,8 @@ const jakarta = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: 'YowNews — Apprends. Crée. Propulse-toi.',
-  description: 'La plateforme éducative panafricaine qui réunit blogs, podcasts et cours.',
+  title: 'YowNews. Apprenez. Explorez. Grandissez.',
+  description: 'La plateforme éducative camerounaise qui réunit blogs, podcasts et cours.',
 };
 
 export default async function LocaleLayout({

@@ -175,7 +175,7 @@ export default function RoleRequestsPage() {
         await apiFetch(`/api/admin/users/${app.userId}/roles`, { method: 'POST', body: { roleId: targetRole.id } });
       }
       await fetchData();
-      showToast(`${displayName(app)} → ${target === 'editor' ? 'Rédacteur' : 'Lecteur'}`);
+      showToast(`${displayName(app)} : ${target === 'editor' ? 'Rédacteur' : 'Lecteur'}`);
     } catch (e) {
       setError(e instanceof BffApiError ? e.message : 'Échec du changement de rôle.');
     } finally {

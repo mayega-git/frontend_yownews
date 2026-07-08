@@ -23,7 +23,13 @@ function favoriteKey(item: Pick<FeedItem, 'id' | 'contentType'>) {
 
 export default function FeedView({ contentType }: { contentType: 'BLOG' | 'PODCAST' | 'COURSE' }) {
   const pathname = usePathname();
-  const spacePrefix = pathname.startsWith('/reader') ? '/reader' : pathname.startsWith('/editor') ? '/editor' : '/admin';
+  const spacePrefix = pathname.startsWith('/reader')
+    ? '/reader'
+    : pathname.startsWith('/editor')
+      ? '/editor'
+      : pathname.startsWith('/admin')
+        ? '/admin'
+        : '/public';
   const [items, setItems] = useState<FeedItem[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [favorites, setFavorites] = useState<Set<string>>(new Set());

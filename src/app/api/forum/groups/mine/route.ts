@@ -1,13 +1,13 @@
 import 'server-only';
 import { handleRoute, fail } from '@/server/api-response';
 import { readSession } from '@/server/session';
-import * as newsletterApi from '@/server/ksm/modules/newsletter';
+import * as forumApi from '@/server/ksm/modules/forum';
 
-export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+// GET /api/forum/groups/mine — forums créés par l'utilisateur + forums rejoints
+export async function GET() {
   return handleRoute(async () => {
     const session = await readSession();
     if (!session) return fail(401, 'UNAUTHORIZED', 'Not authenticated');
-    const { id } = await params;
-    return newsletterApi.submitNewsletter(session, id, session.user.id);
+    return forumApi.listMyGroups(session, session.user.id);
   });
 }

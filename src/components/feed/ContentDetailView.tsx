@@ -2,6 +2,8 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { coverPathFor } from './contentLinks';
+import { Link } from '@/i18n/navigation';
+import { useSessionUser } from '@/components/providers/session-provider';
 
 export type DetailContentType = 'BLOG' | 'PODCAST' | 'COURSE';
 
@@ -72,6 +74,93 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
   const [authorRedacteur, setAuthorRedacteur] = useState<ApprovedRedacteur>(null);
   const [subscribed, setSubscribed] = useState(false);
   const [subscribeBusy, setSubscribeBusy] = useState(false);
+  const [showSubscribeModal, setShowSubscribeModal] = useState(false);
+  const [modalEmail, setModalEmail] = useState('');
+
+  const sessionUser = useSessionUser();
+
+  // Follow states
+  const [followCounts, setFollowCounts] = useState<{ followers: number; following: number; isFollowing: boolean } | null>(null);
+  const [followBusy, setFollowBusy] = useState(false);
+
+  // Course states
+  const [courseProgress, setCourseProgress] = useState<{ percent: number; completedUnitIds: string[]; enrolled: boolean } | null>(null);
+  const [courseBusy, setCourseBusy] = useState(false);
+  const [courseUnits, setCourseUnits] = useState<any[]>([]);
+
+  useEffect(() => {
+    if (!item?.authorId) return;
+    let cancelled = false;
+    apiFetch<{ followers: number; following: number; isFollowing: boolean }>(`/api/follows/${item.authorId}`)
+      .then((data) => {
+        if (!cancelled) setFollowCounts(data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [item?.authorId]);
+
+  useEffect(() => {
+    if (contentType !== 'COURSE' || !id) return;
+    let cancelled = false;
+    apiFetch<any[]>(`/api/education/courses/${id}/units`)
+      .then((units) => {
+        if (!cancelled) setCourseUnits(units);
+      })
+      .catch(() => {});
+
+    apiFetch<{ percent: number; completedUnitIds: string[]; enrolled: boolean }>(`/api/education/courses/${id}/progress`)
+      .then((data) => {
+        if (!cancelled) setCourseProgress(data);
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [contentType, id]);
+
+  async function handleFollowToggle() {
+    if (!item?.authorId || followBusy || !followCounts) return;
+    setFollowBusy(true);
+    try {
+      if (followCounts.isFollowing) {
+        await apiFetch(`/api/follows/${item.authorId}`, { method: 'DELETE' });
+        setFollowCounts(prev => prev ? { ...prev, followers: prev.followers - 1, isFollowing: false } : null);
+      } else {
+        await apiFetch(`/api/follows/${item.authorId}`, { method: 'POST' });
+        setFollowCounts(prev => prev ? { ...prev, followers: prev.followers + 1, isFollowing: true } : null);
+      }
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setFollowBusy(false);
+    }
+  }
+
+  async function handleEnroll() {
+    if (contentType !== 'COURSE' || courseBusy || !id) return;
+    setCourseBusy(true);
+    try {
+      await apiFetch(`/api/education/courses/${id}/enroll`, { method: 'POST' });
+      const data = await apiFetch<{ percent: number; completedUnitIds: string[]; enrolled: boolean }>(`/api/education/courses/${id}/progress`);
+      setCourseProgress(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCourseBusy(false);
+    }
+  }
+
+  async function handleCompleteUnit(unitId: string) {
+    if (contentType !== 'COURSE' || courseBusy || !id) return;
+    setCourseBusy(true);
+    try {
+      await apiFetch(`/api/education/courses/units/${unitId}/complete`, { method: 'POST' });
+      const data = await apiFetch<{ percent: number; completedUnitIds: string[]; enrolled: boolean }>(`/api/education/courses/${id}/progress`);
+      setCourseProgress(data);
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setCourseBusy(false);
+    }
+  }
 
   useEffect(() => {
     let cancelled = false;
@@ -90,7 +179,8 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
   }, [contentType, id]);
 
   // Résolution du nom d'auteur — best-effort, réservé aux viewers admin (seuls autorisés
-  // sur /api/admin/users) ; échoue silencieusement pour rédacteur/lecteur (id tronqué affiché).
+  // sur /api/admin/users) ; échoue silencieusement pour rédacteur/lecteur (repli sur authorRedacteur
+  // ci-dessous si l'auteur a une newsletter, sinon id tronqué affiché).
   useEffect(() => {
     if (!item?.authorId) return;
     let cancelled = false;
@@ -104,31 +194,57 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
           setAuthorName(full || u.email);
         }
       } catch {
-        /* non-admin : on garde l'id tronqué */
+        /* non-admin : repli sur authorRedacteur (voir effet suivant) ou id tronqué */
       }
     })();
     return () => { cancelled = true; };
   }, [item?.authorId]);
 
   // Le bouton « S'abonner à ma newsletter » n'apparaît que si l'auteur de ce contenu est
-  // lui-même un rédacteur de newsletter approuvé.
+  // lui-même un rédacteur de newsletter approuvé — valable pour TOUS les types de contenu,
+  // y compris les cours (ne dépend pas de supportsRatings, propriété réservée aux ratings/commentaires).
   useEffect(() => {
-    if (!item?.authorId || !supportsRatings) return;
+    if (!item?.authorId) return;
     let cancelled = false;
     apiFetch<ApprovedRedacteur>(`/api/newsletter/redacteurs/by-user/${item.authorId}`)
-      .then((r) => { if (!cancelled) setAuthorRedacteur(r); })
+      .then((r) => {
+        if (cancelled || !r) return;
+        setAuthorRedacteur(r);
+        // Repli nom d'auteur pour les viewers non-admin (donnée déjà disponible ici, sans appel
+        // supplémentaire) — ne remplace pas une résolution admin déjà réussie.
+        setAuthorName((cur) => cur ?? ([r.prenom, r.nom].filter(Boolean).join(' ').trim() || cur));
+      })
       .catch(() => {});
     return () => { cancelled = true; };
-  }, [item?.authorId, supportsRatings]);
+  }, [item?.authorId]);
 
-  const subscribeToRedacteur = async () => {
+  // Reflète un abonnement déjà existant à l'auteur (sinon le bouton repart toujours à zéro).
+  useEffect(() => {
+    if (!authorRedacteur) return;
+    let cancelled = false;
+    apiFetch<{ id: string }[]>('/api/newsletter/subscriptions/redacteurs')
+      .then((mine) => {
+        if (!cancelled && Array.isArray(mine) && mine.some((r) => r.id === authorRedacteur.id)) {
+          setSubscribed(true);
+        }
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [authorRedacteur]);
+
+  const subscribeToRedacteur = () => {
     if (!authorRedacteur || subscribeBusy) return;
-    const email = window.prompt('Email pour recevoir cette newsletter :');
-    if (!email || !email.trim()) return;
+    setModalEmail(sessionUser?.email ?? '');
+    setShowSubscribeModal(true);
+  };
+
+  const handleSubscribeSubmit = async () => {
+    if (!authorRedacteur || subscribeBusy || !modalEmail.trim()) return;
     setSubscribeBusy(true);
     try {
-      await apiFetch(`/api/newsletter/subscriptions/redacteurs/${authorRedacteur.id}`, { method: 'POST', body: { email: email.trim() } });
+      await apiFetch(`/api/newsletter/subscriptions/redacteurs/${authorRedacteur.id}`, { method: 'POST', body: { email: modalEmail.trim() } });
       setSubscribed(true);
+      setShowSubscribeModal(false);
     } catch { /* best-effort */ }
     finally { setSubscribeBusy(false); }
   };
@@ -301,17 +417,37 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
           <h1 style={{ fontFamily: 'var(--font-d)', fontSize: '28px', fontWeight: 800, margin: '12px 0 16px' }}>{item.title}</h1>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
-            <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'linear-gradient(135deg,var(--blue),var(--accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: '13px', color: '#fff', flexShrink: 0 }}>
-              {initials(authorLabel)}
-            </div>
+            <Link href={`/profile/${item.authorId}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+              <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'linear-gradient(135deg,var(--blue),var(--accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: '13px', color: '#fff', flexShrink: 0 }}>
+                {initials(authorLabel)}
+              </div>
+            </Link>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontFamily: 'var(--font-d)', fontSize: '13px', fontWeight: 700 }}>{authorLabel}</div>
+              <div style={{ fontFamily: 'var(--font-d)', fontSize: '13px', fontWeight: 700 }}>
+                <Link href={`/profile/${item.authorId}`} style={{ color: 'inherit', textDecoration: 'none' }} className="hover:underline">
+                  {authorLabel}
+                </Link>
+              </div>
               <div style={{ fontSize: '12px', color: 'var(--gray-500, #6b7280)' }}>
                 {formatDate(item.publishedAt ?? item.createdAt)}
                 {item.readingTime ? ` · ${item.readingTime} min de lecture` : ''}
               </div>
             </div>
-            {authorRedacteur && (
+            {followCounts && sessionUser && sessionUser.id !== item.authorId && (
+              <button
+                type="button"
+                onClick={handleFollowToggle}
+                disabled={followBusy}
+                style={{
+                  border: '1px solid var(--blue, #2563eb)', borderRadius: '20px', padding: '4px 12px', fontSize: '12px', fontWeight: 700,
+                  background: followCounts.isFollowing ? 'var(--blue, #2563eb)' : '#fff', color: followCounts.isFollowing ? '#fff' : 'var(--blue, #2563eb)',
+                  cursor: 'pointer', flexShrink: 0, marginRight: '8px'
+                }}
+              >
+                {followCounts.isFollowing ? 'Suivi' : 'Suivre'}
+              </button>
+            )}
+            {sessionUser && authorRedacteur && (
               <button
                 type="button"
                 onClick={subscribeToRedacteur}
@@ -327,19 +463,96 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
             )}
           </div>
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px', paddingBottom: '16px', borderBottom: '1px solid var(--gray-200, #e5e7eb)' }}>
-            <button
-              type="button"
-              onClick={toggleFavorite}
-              title={favorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-              style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', color: favorited ? 'var(--accent)' : 'var(--gray-400, #9ca3af)', fontSize: '13px' }}
-            >
-              <svg width="18" height="18" viewBox="0 0 24 24" fill={favorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z"/>
-              </svg>
-              {favorited ? 'Favori' : 'Ajouter aux favoris'}
-            </button>
-          </div>
+          {sessionUser && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px', paddingBottom: '16px', borderBottom: '1px solid var(--gray-200, #e5e7eb)' }}>
+              <button
+                type="button"
+                onClick={toggleFavorite}
+                title={favorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+                style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', color: favorited ? 'var(--accent)' : 'var(--gray-400, #9ca3af)', fontSize: '13px' }}
+              >
+                <svg width="18" height="18" viewBox="0 0 24 24" fill={favorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z"/>
+                </svg>
+                {favorited ? 'Favori' : 'Ajouter aux favoris'}
+              </button>
+            </div>
+          )}
+
+          {/* Course Enrollment & Progress */}
+          {contentType === 'COURSE' && courseProgress && (
+            <>
+              {!courseProgress.enrolled ? (
+                <div style={{
+                  background: 'linear-gradient(135deg, rgba(37,99,235,0.05), rgba(239,68,68,0.05))',
+                  border: '1px solid var(--gray-200, #e5e7eb)',
+                  borderRadius: '12px',
+                  padding: '24px',
+                  textAlign: 'center',
+                  marginBottom: '24px'
+                }}>
+                  <h3 style={{ fontFamily: 'var(--font-d)', fontSize: '18px', fontWeight: 700, marginBottom: '8px' }}>Prêt à commencer ce cours ?</h3>
+                  <p style={{ color: 'var(--gray-600)', fontSize: '14px', marginBottom: '16px' }}>Inscrivez-vous pour suivre votre progression et valider les chapitres.</p>
+                  <button
+                    type="button"
+                    onClick={handleEnroll}
+                    disabled={courseBusy}
+                    style={{
+                      border: 'none', borderRadius: '24px', padding: '10px 24px', fontSize: '14px', fontWeight: 700,
+                      background: 'var(--blue, #2563eb)', color: '#fff', cursor: 'pointer'
+                    }}
+                  >
+                    S&apos;inscrire au cours
+                  </button>
+                </div>
+              ) : (
+                <div style={{
+                  background: '#f8fafc',
+                  border: '1px solid var(--gray-200, #e5e7eb)',
+                  borderRadius: '12px',
+                  padding: '20px',
+                  marginBottom: '24px'
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <span style={{ fontSize: '14px', fontWeight: 700, color: 'var(--gray-700)' }}>Votre Progression</span>
+                    <span style={{ fontSize: '14px', fontWeight: 800, color: 'var(--blue)' }}>{courseProgress.percent}%</span>
+                  </div>
+                  <div style={{ width: '100%', height: '8px', background: '#e2e8f0', borderRadius: '4px', overflow: 'hidden', marginBottom: '16px' }}>
+                    <div style={{ width: `${courseProgress.percent}%`, height: '100%', background: 'var(--blue, #2563eb)', borderRadius: '4px', transition: 'width 0.3s ease' }} />
+                  </div>
+
+                  <h4 style={{ fontFamily: 'var(--font-d)', fontSize: '14px', fontWeight: 700, marginBottom: '12px', color: 'var(--gray-700)' }}>Chapitres du cours :</h4>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                    {courseUnits.map((unit) => {
+                      const isCompleted = courseProgress.completedUnitIds.includes(unit.id);
+                      return (
+                        <div key={unit.id} style={{ display: 'flex', alignItems: 'center', gap: '10px', padding: '10px 12px', background: '#fff', borderRadius: '8px', border: '1px solid #f1f5f9' }}>
+                          <input
+                            type="checkbox"
+                            checked={isCompleted}
+                            onChange={() => handleCompleteUnit(unit.id)}
+                            disabled={courseBusy}
+                            style={{ width: '18px', height: '18px', cursor: 'pointer' }}
+                          />
+                          <div style={{ flex: 1 }}>
+                            <div style={{ fontSize: '13.5px', fontWeight: 600, color: isCompleted ? 'var(--gray-500)' : 'var(--gray-800)', textDecoration: isCompleted ? 'line-through' : 'none' }}>
+                              {unit.title}
+                            </div>
+                            {unit.duration && (
+                              <span style={{ fontSize: '11px', color: 'var(--gray-400)' }}>{unit.duration} min</span>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })}
+                    {courseUnits.length === 0 && (
+                      <p style={{ fontSize: '12px', color: 'var(--gray-400)' }}>Aucun chapitre disponible pour le moment.</p>
+                    )}
+                  </div>
+                </div>
+              )}
+            </>
+          )}
 
           {item.description && (
             <p style={{ color: 'var(--gray-600, #4b5563)', fontSize: '15px', marginBottom: '16px' }}>{item.description}</p>
@@ -383,23 +596,31 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
                 <h3 style={{ fontFamily: 'var(--font-d)', fontSize: '16px', fontWeight: 700, margin: '0 0 12px' }}>
                   Commentaires {comments.length > 0 ? `(${comments.length})` : ''}
                 </h3>
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
-                  <input
-                    value={newComment}
-                    onChange={(e) => setNewComment(e.target.value)}
-                    placeholder="Ajouter un commentaire…"
-                    style={{ flex: 1, border: '1px solid var(--gray-200, #e5e7eb)', borderRadius: '8px', padding: '9px 12px', fontSize: '14px' }}
-                    onKeyDown={(e) => { if (e.key === 'Enter') submitComment(); }}
-                  />
-                  <button
-                    type="button"
-                    onClick={submitComment}
-                    disabled={commentBusy || !newComment.trim()}
-                    style={{ border: 'none', borderRadius: '8px', padding: '0 16px', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: commentBusy ? 'default' : 'pointer', opacity: newComment.trim() ? 1 : 0.6 }}
-                  >
-                    Publier
-                  </button>
-                </div>
+                {sessionUser ? (
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '18px' }}>
+                    <input
+                      value={newComment}
+                      onChange={(e) => setNewComment(e.target.value)}
+                      placeholder="Ajouter un commentaire…"
+                      style={{ flex: 1, border: '1px solid var(--gray-200, #e5e7eb)', borderRadius: '8px', padding: '9px 12px', fontSize: '14px' }}
+                      onKeyDown={(e) => { if (e.key === 'Enter') submitComment(); }}
+                    />
+                    <button
+                      type="button"
+                      onClick={submitComment}
+                      disabled={commentBusy || !newComment.trim()}
+                      style={{ border: 'none', borderRadius: '8px', padding: '0 16px', background: 'var(--accent)', color: '#fff', fontWeight: 600, fontSize: '13px', cursor: commentBusy ? 'default' : 'pointer', opacity: newComment.trim() ? 1 : 0.6 }}
+                    >
+                      Publier
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ padding: '12px 14px', background: '#F9FAFB', border: '1px solid #E5E7EB', borderRadius: '8px', fontSize: '13px', color: '#6B7280', marginBottom: '18px', display: 'flex', gap: '6px', alignItems: 'center' }}>
+                    <span>Veuillez vous </span>
+                    <Link href="/auth/login" style={{ color: 'var(--accent)', fontWeight: 600, textDecoration: 'underline' }}>connecter</Link>
+                    <span> pour participer à la discussion.</span>
+                  </div>
+                )}
 
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
                   {comments.length === 0 && (
@@ -421,13 +642,19 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
                             <div style={{ fontSize: '13.5px', color: 'var(--gray-800, #1f2937)' }}>{c.content}</div>
                             <div style={{ display: 'flex', gap: '12px', marginTop: '4px' }}>
                               <span style={{ fontSize: '11px', color: 'var(--gray-400, #9ca3af)' }}>{formatDate(c.createdAt)}</span>
-                              {replies !== undefined
-                                ? <button type="button" onClick={() => hideReplies(c.id)} style={{ border: 'none', background: 'none', color: 'var(--gray-500, #6b7280)', fontSize: '11px', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Masquer les réponses</button>
-                                : <button type="button" onClick={() => openReplyForm(c.id)} style={{ border: 'none', background: 'none', color: 'var(--gray-500, #6b7280)', fontSize: '11px', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Répondre</button>
-                              }
-                              <button type="button" onClick={() => deleteComment(c.id)} style={{ border: 'none', background: 'none', color: 'var(--gray-400, #9ca3af)', fontSize: '11px', cursor: 'pointer', padding: 0 }}>
-                                Supprimer
-                              </button>
+                              {sessionUser && (
+                                <>
+                                  {replies !== undefined
+                                    ? <button type="button" onClick={() => hideReplies(c.id)} style={{ border: 'none', background: 'none', color: 'var(--gray-500, #6b7280)', fontSize: '11px', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Masquer les réponses</button>
+                                    : <button type="button" onClick={() => openReplyForm(c.id)} style={{ border: 'none', background: 'none', color: 'var(--gray-500, #6b7280)', fontSize: '11px', fontWeight: 600, cursor: 'pointer', padding: 0 }}>Répondre</button>
+                                  }
+                                  {sessionUser.id === c.commentByUser && (
+                                    <button type="button" onClick={() => deleteComment(c.id)} style={{ border: 'none', background: 'none', color: 'var(--gray-400, #9ca3af)', fontSize: '11px', cursor: 'pointer', padding: 0 }}>
+                                      Supprimer
+                                    </button>
+                                  )}
+                                </>
+                              )}
                             </div>
 
                             {replies !== undefined && (

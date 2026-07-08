@@ -7,6 +7,13 @@ import { useSession } from '@/components/providers/session-provider';
 import { AuthLeftPanel } from '@/components/auth/AuthLeftPanel';
 import { isPlatformAdmin, isEducationEditor } from '@/lib/roles';
 
+type LoginResult = {
+  requiresOrgSelection?: boolean;
+  pendingId?: string;
+  organizations?: { organizationId: string; organizationCode?: string; displayName: string }[];
+  user?: { permissions?: string[]; roles: string[] };
+};
+
 export default function LoginPage() {
   const router = useRouter();
   const { refresh } = useSession();
@@ -17,6 +24,8 @@ export default function LoginPage() {
   const [loading, setLoading] = useState(false);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<{ email?: string; password?: string }>({});
+  // Étape « Choisir votre organisation » (login multi-orgs)
+  const [orgStep, setOrgStep] = useState<{ pendingId: string; organizations: NonNullable<LoginResult['organizations']> } | null>(null);
 
   function validate() {
     const errs: typeof fieldErrors = {};
@@ -37,21 +46,52 @@ export default function LoginPage() {
     setGlobalError(null);
     setLoading(true);
     try {
-      const res = await apiFetch<{ user: { permissions?: string[]; roles: string[] } }>('/api/auth/login', {
+      const res = await apiFetch<LoginResult>('/api/auth/login', {
         method: 'POST',
         body: { email: email.trim().toLowerCase(), password },
       });
-      await refresh();
-      const authorities = res.user.permissions ?? res.user.roles;
-      const destination = isPlatformAdmin(authorities)
-        ? '/admin/dashboard'
-        : isEducationEditor(authorities)
-          ? '/editor/dashboard'
-          : '/';
-      router.push(destination);
+      if (res.requiresOrgSelection && res.pendingId && res.organizations?.length) {
+        setOrgStep({ pendingId: res.pendingId, organizations: res.organizations });
+        return;
+      }
+      await finishLogin(res);
     } catch (err) {
       if (err instanceof BffApiError && err.status === 401) {
         setGlobalError('Email ou mot de passe incorrect.');
+      } else {
+        setGlobalError('Une erreur est survenue. Veuillez réessayer.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  async function finishLogin(res: LoginResult) {
+    await refresh();
+    const authorities = res.user?.permissions ?? res.user?.roles ?? [];
+    const destination = isPlatformAdmin(authorities)
+      ? '/admin/dashboard'
+      : isEducationEditor(authorities)
+        ? '/editor/dashboard'
+        : '/';
+    router.push(destination);
+  }
+
+  async function handleSelectOrg(organizationId: string) {
+    if (!orgStep || loading) return;
+    setGlobalError(null);
+    setLoading(true);
+    try {
+      const res = await apiFetch<LoginResult>('/api/auth/login/select-org', {
+        method: 'POST',
+        body: { pendingId: orgStep.pendingId, organizationId },
+      });
+      await finishLogin(res);
+    } catch (err) {
+      if (err instanceof BffApiError && err.status === 401) {
+        // pendingId expiré : retour à l'étape identifiants
+        setOrgStep(null);
+        setGlobalError('La session de connexion a expiré. Veuillez vous reconnecter.');
       } else {
         setGlobalError('Une erreur est survenue. Veuillez réessayer.');
       }
@@ -104,6 +144,56 @@ export default function LoginPage() {
         </div>
 
         <div className="w-full max-w-[400px]">
+          {orgStep ? (
+            <div>
+              <div className="mb-8">
+                <h2 className="font-display text-[28px] font-extrabold text-[#0F172A] mb-2">
+                  Choisir votre organisation
+                </h2>
+                <p className="text-[15px] text-[#64748B]">
+                  Votre compte est rattaché à plusieurs organisations. Sélectionnez celle avec laquelle vous souhaitez continuer.
+                </p>
+              </div>
+              {globalError && (
+                <div className="mb-4 px-4 py-3 rounded-[10px] bg-red-50 border border-red-200 text-sm text-red-600">
+                  {globalError}
+                </div>
+              )}
+              <div className="flex flex-col gap-3" role="list" aria-label="Vos organisations">
+                {orgStep.organizations.map((org) => (
+                  <button
+                    key={org.organizationId}
+                    type="button"
+                    disabled={loading}
+                    onClick={() => handleSelectOrg(org.organizationId)}
+                    className="flex items-center gap-3 w-full text-left px-4 py-3.5 rounded-[10px] border-[1.5px] border-gray-200 bg-white transition-all duration-200 hover:border-[#1565C0] hover:shadow-[0_0_0_4px_rgba(21,101,192,.08)] disabled:opacity-60 disabled:cursor-not-allowed"
+                  >
+                    <span
+                      className="w-10 h-10 rounded-[9px] flex items-center justify-center font-display font-bold text-sm text-white shrink-0"
+                      style={{ background: 'linear-gradient(135deg,#1565C0,#FF6B35)' }}
+                    >
+                      {org.displayName.slice(0, 2).toUpperCase()}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block text-[15px] font-semibold text-[#0F172A] truncate">{org.displayName}</span>
+                      {org.organizationCode && (
+                        <span className="block text-xs text-[#64748B] truncate">{org.organizationCode}</span>
+                      )}
+                    </span>
+                    <svg className="ml-auto shrink-0 text-gray-400" width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
+                  </button>
+                ))}
+              </div>
+              <button
+                type="button"
+                onClick={() => { setOrgStep(null); setGlobalError(null); }}
+                className="mt-6 text-sm text-[#1565C0] font-medium hover:text-[#FF6B35] transition-colors"
+              >
+               Utiliser un autre compte
+              </button>
+            </div>
+          ) : (
+          <>
           {/* Header */}
           <div className="mb-9">
             <h2 className="font-display text-[32px] font-extrabold text-[#0F172A] mb-2">
@@ -305,6 +395,8 @@ export default function LoginPage() {
             et notre{' '}
             <a href="#" className="text-gray-500 underline hover:text-[#1565C0] transition-colors">Politique de confidentialité</a>.
           </p>
+          </>
+          )}
         </div>
       </main>
     </div>

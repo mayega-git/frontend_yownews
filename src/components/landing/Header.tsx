@@ -15,21 +15,28 @@ export function Header() {
       : '/reader/profile';
 
   return (
-    <header className="header" id="hdr">
-      <div className="container">
-        <Link href="/" className="logo" aria-label="YowNews">
-          <div className="logo-icon" aria-hidden="true">YN</div>
-          <span className="logo-text"><span className="l1">Yow</span><span className="l2">News</span></span>
+    <header className="lv-nav">
+      <div className="lv-container lv-nav-inner">
+        <Link href="/" className="lv-brand" aria-label="YowNews">
+          <span className="lv-logo" aria-hidden="true">YN</span> YowNews
         </Link>
-        <div className="h-right" style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div className="lv-nav-links">
+          <Link href="/public/blogs">Blogs</Link>
+          <Link href="/public/podcasts">Podcasts</Link>
+          <Link href="/public/cours">Cours</Link>
+          <Link href="/#features">À propos</Link>
+        </div>
+        <div className="lv-nav-cta">
           {user ? (
-            <Link href={dashboardHref} className="btn btn-orange btn-sm" style={{ fontFamily: 'var(--font-d)', fontWeight: 600 }}>
-              Dashboard
+            <Link href={dashboardHref} className="lv-btn lv-btn-orange">
+              Mon espace
             </Link>
           ) : (
             <>
-              <Link href="/auth/login" className="btn btn-outline btn-sm">Connexion</Link>
-              <Link href="/auth/sign-up" className="btn btn-orange btn-sm">Commencer</Link>
+              <Link href="/auth/login">Connexion</Link>
+              <Link href="/auth/sign-up" className="lv-btn lv-btn-orange">
+                Commencer gratuitement
+              </Link>
             </>
           )}
         </div>

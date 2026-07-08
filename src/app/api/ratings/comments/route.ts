@@ -2,6 +2,7 @@ import 'server-only';
 import type { NextRequest } from 'next/server';
 import { handleRoute, fail } from '@/server/api-response';
 import { readSession } from '@/server/session';
+import { getAdminSession } from '@/server/ksm/admin-session';
 import * as ratingsApi from '@/server/ksm/modules/ratings';
 import type { EntityType } from '@/server/ksm/modules/ratings';
 
@@ -10,7 +11,10 @@ const VALID_TYPES: EntityType[] = ['BLOG', 'PODCAST', 'COMMENT', 'FORUM', 'DRIVE
 // GET /api/ratings/comments?entityId= — liste des commentaires d'une entité.
 export async function GET(request: NextRequest) {
   return handleRoute(async () => {
-    const session = await readSession();
+    let session = await readSession();
+    if (!session) {
+      session = await getAdminSession();
+    }
     if (!session) return fail(401, 'UNAUTHORIZED', 'Not authenticated');
 
     const entityId = request.nextUrl.searchParams.get('entityId');

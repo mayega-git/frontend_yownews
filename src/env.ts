@@ -1,7 +1,7 @@
 import 'server-only';
 
 export const serverEnv = {
-  KSM_BASE_URL:         process.env.KSM_BASE_URL         ?? 'http://localhost:8081',
+  KSM_BASE_URL:         process.env.KSM_BASE_URL         ?? 'http://localhost:8080',
   KSM_CLIENT_ID:        process.env.KSM_CLIENT_ID        ?? 'yownews-frontend',
   KSM_API_KEY:          process.env.KSM_API_KEY          ?? '',
   KSM_PLATFORM_ORG_CODE: process.env.KSM_PLATFORM_ORG_CODE ?? 'YOWNEWS',

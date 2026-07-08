@@ -584,3 +584,52 @@ export async function listMyFavoritesDetailed(session: AppSession): Promise<Feed
     .filter((r): r is PromiseFulfilledResult<FeedItem> => r.status === 'fulfilled')
     .map((r) => r.value);
 }
+
+// ── Course Enrollment & Progress ─────────────────────────────────────────────
+
+export type CourseProgressView = {
+  percent: number;
+  completedUnitIds: string[];
+  enrolled: boolean;
+};
+
+export function enrollInCourse(session: AppSession, courseId: string): Promise<void> {
+  return sendRaw<void>(`/api/v1/education/courses/${courseId}/enroll`, 'POST', undefined, session);
+}
+
+export function getCourseProgress(session: AppSession, courseId: string): Promise<CourseProgressView> {
+  return getRaw<CourseProgressView>(`/api/v1/education/courses/${courseId}/progress`, session);
+}
+
+export function completeCourseUnit(session: AppSession, unitId: string): Promise<void> {
+  return sendRaw<void>(`/api/v1/education/courses/units/${unitId}/complete`, 'POST', undefined, session);
+}
+
+// ── User Public Profile ──────────────────────────────────────────────────────
+
+export type PublicContentInfo = {
+  id: string;
+  title: string;
+  description: string;
+  contentType: string;
+  domain: string;
+  publishedAt: string;
+};
+
+export type UserPublicProfile = {
+  id: string;
+  firstName: string;
+  lastName: string;
+  biography?: string | null;
+  photoId?: string | null;
+  followersCount: number;
+  followingCount: number;
+  isFollowing: boolean;
+  contents: PublicContentInfo[];
+};
+
+export function getPublicProfile(session: AppSession, userId: string): Promise<UserPublicProfile> {
+  return getRaw<UserPublicProfile>(`/api/v1/education/users/${userId}/profile`, session);
+}
+
+
