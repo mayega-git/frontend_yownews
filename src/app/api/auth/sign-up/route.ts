@@ -2,7 +2,9 @@ import 'server-only';
 import type { NextRequest } from 'next/server';
 import { handleRoute, fail, ok } from '@/server/api-response';
 import * as authApi from '@/server/ksm/modules/auth';
-import { provisionReaderRoles } from '@/server/ksm/admin-session';
+import { inviteEmployee } from '@/server/ksm/modules/organization';
+import { getAdminSession, provisionReaderRoles } from '@/server/ksm/admin-session';
+import { resolvePlatformOrganizationId } from '@/server/ksm/platform-org';
 import { writeSession } from '@/server/session';
 import { logger } from '@/server/logger';
 import type { AppSession } from '@/lib/types/auth';
@@ -136,6 +138,24 @@ export async function POST(request: NextRequest) {
         businessType: body.businessType,
       });
 
+      // Rattache le compte à l'organisation YowNews (best-effort, ne bloque jamais
+      // l'inscription — cf. plan "particuliers → org YowNews").
+      await attachToYowNewsOrganization({ email, firstName, lastName, phoneNumber: body.phoneNumber });
+
+      // Mode strict KSM : un compte LOCAL avec email non vérifié ne reçoit aucune
+      // session à l'inscription. Rien à provisionner/écrire tant que l'email n'est
+      // pas confirmé (cf. /auth/verify-email).
+      if (authApi.isEmailVerificationRequired(registered)) {
+        return ok(
+          {
+            emailVerificationRequired: true as const,
+            email: registered.email,
+            accountMode: 'individual' as const,
+          },
+          { status: 201 },
+        );
+      }
+
       await provisionReaderRoles(registered.id, email);
 
       const session =
@@ -152,6 +172,36 @@ export async function POST(request: NextRequest) {
       );
     }
   });
+}
+
+/**
+ * Rattache un particulier fraîchement inscrit à l'organisation YowNews (EmployeeMembership
+ * côté KSM), pour que ses logins suivants la résolvent parmi ses contextes. Fail-open :
+ * une erreur (y compris "déjà membre") est loguée mais ne fait jamais échouer l'inscription.
+ */
+async function attachToYowNewsOrganization(input: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  phoneNumber?: string;
+}): Promise<void> {
+  try {
+    const [adminSession, organizationId] = await Promise.all([
+      getAdminSession(),
+      resolvePlatformOrganizationId(),
+    ]);
+    if (!adminSession || !organizationId) return;
+    await inviteEmployee(adminSession, organizationId, {
+      email: input.email,
+      firstName: input.firstName,
+      lastName: input.lastName,
+      phoneNumber: input.phoneNumber,
+      jobTitle: 'Lecteur',
+      employmentType: 'READER',
+    });
+  } catch (cause) {
+    logger.warn({ cause, email: input.email }, 'auth.sign_up.organization_membership_failed');
+  }
 }
 
 /** Re-login l'utilisateur pour obtenir des authorities à jour ; null si le re-login échoue. */

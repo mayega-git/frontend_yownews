@@ -208,6 +208,7 @@ function ContentSpace({ publication, onBack }: { publication: Publication; onBac
   const [message, setMessage] = useState<{ kind: 'ok' | 'err'; text: string } | null>(null);
   const [coverFile, setCoverFile] = useState<File | null>(null);
   const [coverPreview, setCoverPreview] = useState<string | null>(null);
+  const [confirmPublishId, setConfirmPublishId] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   const editor = useEditor({
@@ -266,7 +267,7 @@ function ContentSpace({ publication, onBack }: { publication: Publication; onBac
   };
 
   const publishContent = async (id: string) => {
-    if (!window.confirm('Publier ce contenu ? Il sera envoyé par email aux abonnés des catégories de la newsletter.')) return;
+    setConfirmPublishId(null);
     setMessage(null);
     setContents((prev) => prev ? prev.map((c) => c.id === id ? { ...c, statut: 'PUBLISHED' } : c) : prev);
     try {
@@ -392,13 +393,39 @@ function ContentSpace({ publication, onBack }: { publication: Publication; onBac
               <div style={{ marginTop: '4px' }}><ContentStatutBadge statut={c.statut} /></div>
             </div>
             {c.statut !== 'PUBLISHED' && (
-              <button type="button" onClick={() => publishContent(c.id)} style={{ border: 'none', borderRadius: '8px', padding: '7px 14px', background: 'var(--accent)', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
+              <button type="button" onClick={() => setConfirmPublishId(c.id)} style={{ border: 'none', borderRadius: '8px', padding: '7px 14px', background: 'var(--accent)', color: '#fff', fontSize: '12.5px', fontWeight: 700, cursor: 'pointer' }}>
                 Publier
               </button>
             )}
           </div>
         ))}
       </div>
+
+      {confirmPublishId && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          onClick={() => setConfirmPublishId(null)}
+          style={{ position: 'fixed', inset: 0, background: 'rgba(17,24,39,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, padding: '16px' }}
+        >
+          <div onClick={(e) => e.stopPropagation()} style={{ background: '#fff', borderRadius: '14px', padding: '24px', maxWidth: '420px', width: '100%', boxShadow: '0 20px 45px rgba(0,0,0,.18)' }}>
+            <h3 style={{ fontFamily: 'var(--font-d)', fontSize: '17px', fontWeight: 800, margin: '0 0 10px' }}>Publier ce contenu ?</h3>
+            <p style={{ fontSize: '13.5px', lineHeight: 1.55, color: 'var(--gray-600, #4b5563)', margin: '0 0 20px' }}>
+              Il sera envoyé par email aux abonnés de la newsletter (abonnés des catégories et lecteurs qui vous suivent).
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '10px' }}>
+              <button type="button" onClick={() => setConfirmPublishId(null)} style={{
+                border: '1px solid var(--gray-200, #e5e7eb)', borderRadius: '8px', padding: '9px 18px', background: '#fff',
+                color: 'var(--gray-700, #374151)', fontWeight: 600, fontSize: '13.5px', cursor: 'pointer',
+              }}>Annuler</button>
+              <button type="button" onClick={() => publishContent(confirmPublishId)} style={{
+                border: 'none', borderRadius: '8px', padding: '9px 18px', background: 'var(--accent)',
+                color: '#fff', fontWeight: 700, fontSize: '13.5px', cursor: 'pointer',
+              }}>Publier</button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

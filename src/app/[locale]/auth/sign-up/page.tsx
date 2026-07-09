@@ -68,6 +68,7 @@ export default function SignUpPage() {
   const [accountType, setAccountType] = useState<'individual' | 'organization'>('individual');
   const [orgCode, setOrgCode] = useState('');
   const [loading, setLoading] = useState(false);
+  const [emailVerificationRequired, setEmailVerificationRequired] = useState<string | null>(null);
   const [globalError, setGlobalError] = useState<string | null>(null);
   const [fieldErrors, setFieldErrors] = useState<Partial<Record<'firstName' | 'lastName' | 'username' | 'email' | 'password', string>>>({});
 
@@ -99,7 +100,11 @@ export default function SignUpPage() {
     setLoading(true);
     try {
       const phoneNumber = phone.trim() ? `${countryCode}${phone.trim()}` : undefined;
-      const res = await apiFetch<{ accountMode?: 'individual' | 'organization' }>('/api/auth/sign-up', {
+      const res = await apiFetch<{
+        accountMode?: 'individual' | 'organization';
+        emailVerificationRequired?: boolean;
+        email?: string;
+      }>('/api/auth/sign-up', {
         method: 'POST',
         body: {
           firstName: accountType === 'individual' ? firstName.trim() : 'Représentant',
@@ -112,6 +117,10 @@ export default function SignUpPage() {
           orgCode: accountType === 'organization' ? orgCode.trim() : undefined,
         },
       });
+      if (res.emailVerificationRequired) {
+        setEmailVerificationRequired(res.email ?? email.trim().toLowerCase());
+        return;
+      }
       await refresh();
       router.push(res.accountMode === 'organization' ? '/auth/org-onboarding' : '/');
     } catch (err) {
@@ -141,6 +150,37 @@ export default function SignUpPage() {
           ? 'border-[1.5px] border-green-400 shadow-[0_0_0_3px_rgba(34,197,94,.08)]'
           : 'border-[1.5px] border-gray-200 focus:border-[#1565C0] focus:shadow-[0_0_0_3px_rgba(21,101,192,.08)]'
     }`;
+
+  if (emailVerificationRequired) {
+    return (
+      <div className="grid" style={{ gridTemplateColumns: '55% 45%', minHeight: '100vh' }}>
+        <AuthLeftPanel
+          kicker="Rejoins le mouvement"
+          headline={<>Presque prêt·e 📬</>}
+          sub="Il ne reste qu'une étape avant d'accéder à tes articles, podcasts et cours."
+        />
+        <main className="bg-white flex items-center justify-center px-6 py-10 md:px-14" role="main">
+          <div className="w-full max-w-[420px] text-center">
+            <h2 className="font-display text-[28px] font-extrabold text-[#0F172A] mb-3">
+              Vérifie ta boîte mail ✉️
+            </h2>
+            <p className="text-sm text-[#64748B] mb-6">
+              Nous avons envoyé un lien de confirmation à{' '}
+              <span className="font-semibold text-[#0F172A]">{emailVerificationRequired}</span>.
+              Clique dessus pour activer ton compte, puis connecte-toi.
+            </p>
+            <Link
+              href="/auth/login"
+              className="inline-block px-5 py-3 rounded-[10px] font-semibold text-sm text-white transition-colors"
+              style={{ background: 'linear-gradient(135deg,#1565C0,#FF6B35)' }}
+            >
+              Aller à la connexion
+            </Link>
+          </div>
+        </main>
+      </div>
+    );
+  }
 
   return (
     <div className="grid" style={{ gridTemplateColumns: '55% 45%', minHeight: '100vh' }}>

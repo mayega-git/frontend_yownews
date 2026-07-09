@@ -29,10 +29,10 @@ const IC = {
 };
 
 const STATS: { ic: ReactNode; n: string; l: string }[] = [
-  { ic: IC.users, n: '15 000+', l: 'Camerounais formés' },
-  { ic: IC.doc, n: '2 400+', l: 'Épisodes & Analyses' },
-  { ic: IC.cap, n: '180+', l: 'Modules de formation' },
-  { ic: IC.globe, n: '10 / 10', l: 'Régions connectées' },
+  { ic: IC.users, n: '15 000+', l: 'personnes accompagnées dans leur formation' },
+  { ic: IC.doc, n: '2 400+', l: 'histoires et analyses racontées' },
+  { ic: IC.cap, n: '180+', l: 'parcours pour apprendre à votre rythme' },
+  { ic: IC.globe, n: '10 / 10', l: 'régions du Cameroun, une seule communauté' },
 ];
 
 export function StatsBar() {

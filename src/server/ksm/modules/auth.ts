@@ -120,10 +120,37 @@ export type SignUpInput = {
   businessType?: string;
 };
 
+export type EmailVerificationRequiredResult = {
+  status: 'EMAIL_VERIFICATION_REQUIRED';
+  email: string;
+  emailVerified: false;
+};
+
+export type SignUpResult = KsmLoginSession | EmailVerificationRequiredResult;
+
+export function isEmailVerificationRequired(
+  result: SignUpResult,
+): result is EmailVerificationRequiredResult {
+  return (result as EmailVerificationRequiredResult).status === 'EMAIL_VERIFICATION_REQUIRED';
+}
+
 export function signUp(input: SignUpInput) {
-  return callKsm<KsmLoginSession>('/api/auth/sign-up', {
+  return callKsm<SignUpResult>('/api/auth/sign-up', {
     method: 'POST',
     body: input,
     authenticated: false,
   });
+}
+
+// ── Sign-up — email verification ──────────────────────────────────────────────
+
+export function confirmEmailVerification(verificationToken: string) {
+  return callKsm<{ id: string; email: string; emailVerified: boolean }>(
+    '/api/auth/email-verification/confirm',
+    {
+      method: 'POST',
+      body: { verificationToken },
+      authenticated: false,
+    },
+  );
 }

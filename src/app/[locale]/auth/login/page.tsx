@@ -197,7 +197,7 @@ export default function LoginPage() {
           {/* Header */}
           <div className="mb-9">
             <h2 className="font-display text-[32px] font-extrabold text-[#0F172A] mb-2">
-              Bon retour ! 👋
+              Bon retour ! 
             </h2>
             <p className="text-[15px] text-[#64748B]">
               Pas encore de compte ?{' '}

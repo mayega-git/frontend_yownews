@@ -2,7 +2,7 @@
 import { useEffect, useState } from 'react';
 import { apiFetch } from '@/lib/api-client';
 import { coverPathFor } from './contentLinks';
-import { Link } from '@/i18n/navigation';
+import { Link, useRouter } from '@/i18n/navigation';
 import { useSessionUser } from '@/components/providers/session-provider';
 
 export type DetailContentType = 'BLOG' | 'PODCAST' | 'COURSE';
@@ -55,6 +55,7 @@ function initials(name: string) {
 }
 
 export default function ContentDetailView({ contentType, id }: { contentType: DetailContentType; id: string }) {
+  const router = useRouter();
   const [item, setItem] = useState<ContentDetail | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [authorName, setAuthorName] = useState<string | null>(null);
@@ -263,6 +264,7 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
   }, [contentType, id]);
 
   const toggleFavorite = async () => {
+    if (!sessionUser) { router.push('/auth/login'); return; }
     if (busy) return;
     setBusy(true);
     const next = !favorited;
@@ -289,6 +291,7 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
   }, [supportsRatings, id]);
 
   const sendReaction = async (isLike: boolean) => {
+    if (!sessionUser) { router.push('/auth/login'); return; }
     if (ratingBusy || !ratingStats) return;
     setRatingBusy(true);
     const prev = ratingStats;
@@ -417,14 +420,23 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
           <h1 style={{ fontFamily: 'var(--font-d)', fontSize: '28px', fontWeight: 800, margin: '12px 0 16px' }}>{item.title}</h1>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '18px' }}>
-            <Link href={`/profile/${item.authorId}`} style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}>
+            <Link
+              href={sessionUser ? `/profile/${item.authorId}` : '/auth/login'}
+              onClick={(e) => { if (!sessionUser) { e.preventDefault(); router.push('/auth/login'); } }}
+              style={{ display: 'flex', alignItems: 'center', gap: '12px', color: 'inherit', textDecoration: 'none' }}
+            >
               <div style={{ width: '38px', height: '38px', borderRadius: '50%', background: 'linear-gradient(135deg,var(--blue),var(--accent))', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: 'var(--font-d)', fontWeight: 800, fontSize: '13px', color: '#fff', flexShrink: 0 }}>
                 {initials(authorLabel)}
               </div>
             </Link>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontFamily: 'var(--font-d)', fontSize: '13px', fontWeight: 700 }}>
-                <Link href={`/profile/${item.authorId}`} style={{ color: 'inherit', textDecoration: 'none' }} className="hover:underline">
+                <Link
+                  href={sessionUser ? `/profile/${item.authorId}` : '/auth/login'}
+                  onClick={(e) => { if (!sessionUser) { e.preventDefault(); router.push('/auth/login'); } }}
+                  style={{ color: 'inherit', textDecoration: 'none' }}
+                  className="hover:underline"
+                >
                   {authorLabel}
                 </Link>
               </div>
@@ -463,21 +475,19 @@ export default function ContentDetailView({ contentType, id }: { contentType: De
             )}
           </div>
 
-          {sessionUser && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px', paddingBottom: '16px', borderBottom: '1px solid var(--gray-200, #e5e7eb)' }}>
-              <button
-                type="button"
-                onClick={toggleFavorite}
-                title={favorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-                style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', color: favorited ? 'var(--accent)' : 'var(--gray-400, #9ca3af)', fontSize: '13px' }}
-              >
-                <svg width="18" height="18" viewBox="0 0 24 24" fill={favorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
-                  <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z"/>
-                </svg>
-                {favorited ? 'Favori' : 'Ajouter aux favoris'}
-              </button>
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '14px', marginBottom: '18px', paddingBottom: '16px', borderBottom: '1px solid var(--gray-200, #e5e7eb)' }}>
+            <button
+              type="button"
+              onClick={toggleFavorite}
+              title={favorited ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+              style={{ display: 'flex', alignItems: 'center', gap: '6px', border: 'none', background: 'none', cursor: 'pointer', padding: '4px', color: favorited ? 'var(--accent)' : 'var(--gray-400, #9ca3af)', fontSize: '13px' }}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill={favorited ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2">
+                <path d="M19 21l-7-5-7 5V5a2 2 0 012-2h10a2 2 0 012 2v16z"/>
+              </svg>
+              {favorited ? 'Favori' : 'Ajouter aux favoris'}
+            </button>
+          </div>
 
           {/* Course Enrollment & Progress */}
           {contentType === 'COURSE' && courseProgress && (
